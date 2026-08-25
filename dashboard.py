@@ -478,9 +478,9 @@ def index():
             "ref":         r.get("reference_number", ""),
             "submitted":   ts.strftime("%Y-%m-%d %H:%M") if pd.notna(ts) else "—",
             "completeness": f"{r['completeness_pct']:.1f}%",
-            "ready":       "Yes" if pd.notna(r["ready_for_underwriting"]) and r["ready_for_underwriting"] else "No",
-            "officer":     r.get("officer_code") or "",
-            "channel":     r.get("notification_channel") or "",
+            "ready":       "Yes" if pd.notna(r.get("ready_for_underwriting")) and r["ready_for_underwriting"] else "No",
+            "officer":     r.get("officer_code", "") if pd.notna(r.get("officer_code")) else "",
+            "channel":     r.get("notification_channel", "") if pd.notna(r.get("notification_channel")) else "",
             "turnaround":  f"{r['turnaround_seconds']:.1f}s",
         })
 
