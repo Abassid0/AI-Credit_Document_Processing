@@ -101,16 +101,20 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame, bool]:
 # Chart helpers
 # ---------------------------------------------------------------------------
 
-BLUE   = "#1A6BFF"
-GREEN  = "#21C55D"
-RED    = "#FF4B4B"
-ORANGE = "#F5A623"
-WA     = "#25D366"
+ACCENT  = "#4318FF"
+GREEN   = "#01B574"
+RED     = "#EE5D50"
+ORANGE  = "#FFB547"
+INFO    = "#2B77E7"
+TEAL    = "#0DCAF0"
+WA      = "#25D366"
+
+CHART_COLORS = [ACCENT, GREEN, ORANGE, RED, INFO, TEAL, "#7B61FF", "#E667AF"]
 
 PLOTLY_THEME = dict(
     template="plotly_white",
     margin=dict(l=10, r=10, t=30, b=10),
-    font=dict(family="Inter, system-ui, sans-serif", size=12),
+    font=dict(family="Plus Jakarta Sans, Inter, system-ui, sans-serif", size=12, color="#2B3674"),
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(0,0,0,0)",
 )
@@ -123,11 +127,14 @@ def fig_to_json(fig) -> str:
 def chart_volume(df: pd.DataFrame) -> str:
     daily = df.groupby("date").size().reset_index(name="count").sort_values("date")
     fig = px.area(daily, x="date", y="count",
-                  color_discrete_sequence=[BLUE],
+                  color_discrete_sequence=[ACCENT],
                   labels={"date": "", "count": "Applications"},
-                  title="Applications submitted per day")
-    fig.update_traces(line_width=2, fillcolor="rgba(26,107,255,0.12)")
-    fig.update_layout(**PLOTLY_THEME, height=240)
+                  title="Applications per day")
+    fig.update_traces(line_width=2.5, fillcolor="rgba(67,24,255,0.08)",
+                      line_shape="spline")
+    fig.update_layout(**PLOTLY_THEME, height=260)
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(showgrid=True, gridcolor="rgba(163,174,208,0.15)")
     return fig_to_json(fig)
 
 
@@ -137,14 +144,30 @@ def chart_ready(processed: pd.DataFrame) -> str:
     fig = go.Figure(go.Pie(
         labels=["Ready", "Not ready"],
         values=[ready_yes, ready_no],
-        hole=0.58,
+        hole=0.65,
         marker_colors=[GREEN, RED],
         textinfo="percent+label",
         textfont_size=13,
+        pull=[0.02, 0],
     ))
-    fig.update_layout(**PLOTLY_THEME, height=240, title="Readiness split",
+    fig.update_layout(**PLOTLY_THEME, height=260, title="Readiness split",
                       showlegend=False)
     return fig_to_json(fig)
+
+
+def _shorten_flag(raw: str) -> str:
+    """Turn verbose flag strings into compact labels."""
+    raw = raw.strip()
+    for noise in ("field not found on document.", "field not found on document",
+                  "field not found on doc", "field not found"):
+        raw = raw.replace(noise, "").strip().rstrip(".:,")
+    parts = raw.rsplit(".", 1)
+    if len(parts) == 2:
+        doc, field = parts
+        doc = doc.replace("_", " ").title()
+        field = field.replace("_", " ").title()
+        return f"{doc} → {field}"
+    return raw.replace("_", " ").title()[:40]
 
 
 def chart_flags(processed: pd.DataFrame) -> str:
@@ -152,12 +175,14 @@ def chart_flags(processed: pd.DataFrame) -> str:
     for flags_val in processed["flags"].dropna():
         items = flags_val if isinstance(flags_val, list) else []
         for f in items:
-            label = (f.get("type") or f.get("message") or "unknown")[:60] if isinstance(f, dict) else str(f)[:60]
+            raw = (f.get("type") or f.get("message") or "unknown") if isinstance(f, dict) else str(f)
+            label = _shorten_flag(raw)
             flag_counts[label] = flag_counts.get(label, 0) + 1
     if not flag_counts:
         fig = go.Figure()
-        fig.add_annotation(text="No flags raised", x=0.5, y=0.5, showarrow=False, font_size=16)
-        fig.update_layout(**PLOTLY_THEME, height=240, title="Common flags")
+        fig.add_annotation(text="No flags raised", x=0.5, y=0.5, showarrow=False,
+                           font_size=16, font_color="#A3AED0")
+        fig.update_layout(**PLOTLY_THEME, height=260, title="Common flags")
         return fig_to_json(fig)
     flag_df = (
         pd.DataFrame(list(flag_counts.items()), columns=["flag", "count"])
@@ -168,7 +193,9 @@ def chart_flags(processed: pd.DataFrame) -> str:
                  color_discrete_sequence=[RED],
                  labels={"count": "Occurrences", "flag": ""},
                  title="Most common flags")
-    fig.update_layout(**PLOTLY_THEME, height=240)
+    fig.update_layout(**PLOTLY_THEME, height=300)
+    fig.update_xaxes(showgrid=True, gridcolor="rgba(163,174,208,0.15)")
+    fig.update_yaxes(showgrid=False, tickfont=dict(size=11))
     return fig_to_json(fig)
 
 
@@ -176,31 +203,77 @@ def chart_channels(processed: pd.DataFrame) -> str:
     notified = processed[processed["notification_channel"].notna()]
     if notified.empty:
         fig = go.Figure()
-        fig.add_annotation(text="No notifications sent", x=0.5, y=0.5, showarrow=False, font_size=16)
-        fig.update_layout(**PLOTLY_THEME, height=240, title="Notification channels")
+        fig.add_annotation(text="No notifications sent", x=0.5, y=0.5, showarrow=False,
+                           font_size=16, font_color="#A3AED0")
+        fig.update_layout(**PLOTLY_THEME, height=260, title="Notification channels")
         return fig_to_json(fig)
     ch_counts = notified["notification_channel"].value_counts().reset_index()
     ch_counts.columns = ["channel", "count"]
     color_map = {
         "telegram": "#0088CC", "sms": ORANGE,
-        "whatsapp": WA, "email": BLUE, "none": "#BBBBBB",
+        "whatsapp": WA, "email": INFO, "none": "#BBBBBB",
     }
     fig = px.bar(ch_counts, x="channel", y="count", color="channel",
                  color_discrete_map=color_map,
-                 labels={"channel": "", "count": "Notifications sent"},
+                 labels={"channel": "", "count": "Sent"},
                  title="Notification channels")
-    fig.update_layout(**PLOTLY_THEME, height=240, showlegend=False)
+    fig.update_layout(**PLOTLY_THEME, height=260, showlegend=False)
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(showgrid=True, gridcolor="rgba(163,174,208,0.15)")
+    fig.update_traces(marker_line_width=0, marker_cornerradius=6)
     return fig_to_json(fig)
 
 
 def chart_completeness(processed: pd.DataFrame) -> str:
     fig = px.histogram(processed, x="completeness_pct", nbins=20,
-                       color_discrete_sequence=[BLUE],
+                       color_discrete_sequence=[ACCENT],
                        labels={"completeness_pct": "Completeness (%)", "count": ""},
                        title="Completeness distribution")
-    fig.add_vline(x=75, line_dash="dash", line_color=RED,
-                  annotation_text="75% threshold", annotation_position="top right")
-    fig.update_layout(**PLOTLY_THEME, height=200)
+    fig.add_vline(x=75, line_dash="dash", line_color=RED, line_width=1.5,
+                  annotation_text="75% threshold", annotation_position="top right",
+                  annotation_font_color=RED)
+    fig.update_layout(**PLOTLY_THEME, height=260)
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(showgrid=True, gridcolor="rgba(163,174,208,0.15)")
+    fig.update_traces(marker_line_width=0, marker_cornerradius=4)
+    return fig_to_json(fig)
+
+
+def chart_gender(processed: pd.DataFrame) -> str:
+    if "declared_gender" not in processed.columns or processed["declared_gender"].dropna().empty:
+        fig = go.Figure()
+        fig.add_annotation(text="No gender data", x=0.5, y=0.5, showarrow=False,
+                           font_size=16, font_color="#A3AED0")
+        fig.update_layout(**PLOTLY_THEME, height=260, title="Gender distribution")
+        return fig_to_json(fig)
+    gender_counts = processed["declared_gender"].value_counts().reset_index()
+    gender_counts.columns = ["gender", "count"]
+    colors = [ACCENT, GREEN, ORANGE, "#7B61FF"]
+    fig = go.Figure(go.Pie(
+        labels=gender_counts["gender"],
+        values=gender_counts["count"],
+        hole=0.65,
+        marker_colors=colors[:len(gender_counts)],
+        textinfo="percent+label",
+        textfont_size=12,
+    ))
+    fig.update_layout(**PLOTLY_THEME, height=260, title="Gender distribution",
+                      showlegend=False)
+    return fig_to_json(fig)
+
+
+def chart_turnaround(df: pd.DataFrame) -> str:
+    daily = df.groupby("date")["turnaround_seconds"].mean().reset_index().sort_values("date")
+    fig = px.line(daily, x="date", y="turnaround_seconds",
+                  color_discrete_sequence=[GREEN],
+                  labels={"date": "", "turnaround_seconds": "Avg seconds"},
+                  title="Processing time trend")
+    fig.update_traces(line_width=2.5, mode="lines+markers",
+                      marker=dict(size=6, color=GREEN),
+                      line_shape="spline")
+    fig.update_layout(**PLOTLY_THEME, height=260)
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(showgrid=True, gridcolor="rgba(163,174,208,0.15)")
     return fig_to_json(fig)
 
 
@@ -214,220 +287,818 @@ HTML = r"""<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CreditBot Analytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* ── Tokens ────────────────────────────────────────────────────────── */
   :root {
-    --bg: #F6F8FB; --card: #FFFFFF; --border: #E3E8EF;
-    --text: #1A202C; --muted: #6B7280;
-    --blue: #1A6BFF; --green: #21C55D; --red: #FF4B4B;
-    --font: Inter, system-ui, sans-serif;
+    --bg:         #F4F7FE;
+    --card:       #FFFFFF;
+    --border:     #E9EDF7;
+    --text:       #1B2559;
+    --text-sec:   #2B3674;
+    --muted:      #A3AED0;
+    --accent:     #4318FF;
+    --accent-bg:  rgba(67,24,255,0.06);
+    --green:      #01B574;
+    --green-bg:   rgba(1,181,116,0.08);
+    --red:        #EE5D50;
+    --red-bg:     rgba(238,93,80,0.08);
+    --orange:     #FFB547;
+    --orange-bg:  rgba(255,181,71,0.08);
+    --info:       #2B77E7;
+    --sidebar:    #1B2559;
+    --sidebar-hover: rgba(255,255,255,0.08);
+    --sidebar-active: rgba(255,255,255,0.12);
+    --shadow-sm:  0 1px 3px rgba(27,37,89,0.04);
+    --shadow-md:  0 4px 12px rgba(27,37,89,0.06);
+    --shadow-lg:  0 8px 24px rgba(27,37,89,0.08);
+    --radius:     16px;
+    --radius-sm:  10px;
+    --font:       'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+    --font-body:  'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono:  'SF Mono', 'Cascadia Code', 'Consolas', monospace;
   }
-  body { background: var(--bg); color: var(--text); font-family: var(--font);
-         font-size: 14px; line-height: 1.5; padding: 0 0 2rem; }
-  header { background: var(--card); border-bottom: 1px solid var(--border);
-           padding: 0.9rem 2rem; display: flex; align-items: center;
-           justify-content: space-between; }
-  header h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.01em; }
-  header .sub { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
-  .refresh-btn { background: var(--blue); color: #fff; border: none;
-                 border-radius: 6px; padding: 0.45rem 1rem;
-                 font-size: 0.82rem; font-weight: 600; cursor: pointer; }
-  .refresh-btn:hover { opacity: 0.88; }
-  main { max-width: 1200px; margin: 0 auto; padding: 1.5rem 1.5rem 0; }
-  .demo-banner { background: #FEF3C7; border: 1px solid #F59E0B;
-                 border-radius: 8px; padding: 0.6rem 1rem;
-                 font-size: 0.82rem; color: #92400E; margin-bottom: 1.25rem; }
-  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr);
-             gap: 1rem; margin-bottom: 1.25rem; }
-  @media(max-width:768px){ .kpi-row { grid-template-columns: repeat(2, 1fr); } }
-  .kpi { background: var(--card); border-radius: 10px; padding: 1rem 1.2rem;
-         border-left: 4px solid var(--blue);
-         box-shadow: 0 1px 3px rgba(0,0,0,.06); }
-  .kpi-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
-               letter-spacing: .07em; color: var(--muted); margin-bottom: 4px; }
-  .kpi-value { font-size: 1.9rem; font-weight: 800; line-height: 1.1;
-               letter-spacing: -0.02em; }
-  .kpi-sub { font-size: 0.72rem; color: var(--muted); margin-top: 3px; }
-  .chart-grid-2 { display: grid; grid-template-columns: 3fr 2fr;
-                  gap: 1rem; margin-bottom: 1rem; }
-  .chart-grid-equal { display: grid; grid-template-columns: 1fr 1fr;
-                      gap: 1rem; margin-bottom: 1rem; }
-  @media(max-width:768px){
-    .chart-grid-2, .chart-grid-equal { grid-template-columns: 1fr; }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:         #0B1437;
+      --card:       #111C44;
+      --border:     #1B254B;
+      --text:       #FFFFFF;
+      --text-sec:   #E2E8F0;
+      --muted:      #A3AED0;
+      --accent-bg:  rgba(67,24,255,0.15);
+      --green-bg:   rgba(1,181,116,0.15);
+      --red-bg:     rgba(238,93,80,0.15);
+      --orange-bg:  rgba(255,181,71,0.12);
+      --shadow-sm:  0 1px 3px rgba(0,0,0,0.2);
+      --shadow-md:  0 4px 12px rgba(0,0,0,0.25);
+      --shadow-lg:  0 8px 24px rgba(0,0,0,0.3);
+    }
   }
-  .card { background: var(--card); border-radius: 10px; padding: 1rem;
-          box-shadow: 0 1px 3px rgba(0,0,0,.06);
-          border: 1px solid var(--border); }
-  .card h3 { font-size: 0.82rem; font-weight: 700; color: var(--muted);
-             text-transform: uppercase; letter-spacing: .06em;
-             margin-bottom: 0.6rem; }
-  .full-width { margin-bottom: 1rem; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-  th { background: var(--bg); color: var(--muted); font-weight: 700;
-       font-size: 0.68rem; text-transform: uppercase; letter-spacing: .06em;
-       padding: 0.5rem 0.75rem; text-align: left;
-       border-bottom: 2px solid var(--border); }
-  td { padding: 0.45rem 0.75rem; border-bottom: 1px solid var(--border); }
+  :root[data-theme="dark"] {
+    --bg:         #0B1437;
+    --card:       #111C44;
+    --border:     #1B254B;
+    --text:       #FFFFFF;
+    --text-sec:   #E2E8F0;
+    --muted:      #A3AED0;
+    --accent-bg:  rgba(67,24,255,0.15);
+    --green-bg:   rgba(1,181,116,0.15);
+    --red-bg:     rgba(238,93,80,0.15);
+    --orange-bg:  rgba(255,181,71,0.12);
+    --shadow-sm:  0 1px 3px rgba(0,0,0,0.2);
+    --shadow-md:  0 4px 12px rgba(0,0,0,0.25);
+    --shadow-lg:  0 8px 24px rgba(0,0,0,0.3);
+  }
+
+  /* ── Base ───────────────────────────────────────────────────────────── */
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Sidebar ────────────────────────────────────────────────────────── */
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0;
+    width: 260px;
+    background: linear-gradient(135deg, #1B2559 0%, #111C44 100%);
+    display: flex; flex-direction: column;
+    z-index: 100;
+    transition: transform 0.3s cubic-bezier(.4,0,.2,1);
+  }
+  .sidebar-brand {
+    padding: 1.5rem 1.5rem 1.2rem;
+    display: flex; align-items: center; gap: 0.75rem;
+  }
+  .sidebar-brand .logo {
+    width: 38px; height: 38px;
+    background: var(--accent);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.15rem; color: #fff; font-weight: 800;
+  }
+  .sidebar-brand .brand-text {
+    color: #FFFFFF; font-weight: 700; font-size: 1.05rem;
+    letter-spacing: -0.01em;
+  }
+  .sidebar-brand .brand-sub {
+    color: rgba(255,255,255,0.45); font-size: 0.68rem;
+    font-weight: 500; margin-top: 1px;
+  }
+  .sidebar-divider {
+    height: 1px; background: rgba(255,255,255,0.08);
+    margin: 0.25rem 1.25rem 0.75rem;
+  }
+  .sidebar-nav { flex: 1; padding: 0 0.75rem; }
+  .sidebar-nav a {
+    display: flex; align-items: center; gap: 0.8rem;
+    padding: 0.7rem 0.85rem;
+    border-radius: 12px;
+    color: rgba(255,255,255,0.55);
+    text-decoration: none;
+    font-size: 0.85rem; font-weight: 500;
+    transition: all 0.2s;
+    margin-bottom: 2px;
+  }
+  .sidebar-nav a:hover { background: var(--sidebar-hover); color: rgba(255,255,255,0.85); }
+  .sidebar-nav a.active {
+    background: var(--sidebar-active);
+    color: #FFFFFF; font-weight: 600;
+  }
+  .sidebar-nav a.active::before {
+    content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+    width: 4px; height: 24px; border-radius: 0 4px 4px 0;
+    background: var(--accent);
+  }
+  .sidebar-nav a { position: relative; }
+  .sidebar-nav svg { width: 20px; height: 20px; flex-shrink: 0; opacity: 0.7; }
+  .sidebar-nav a.active svg { opacity: 1; }
+  .sidebar-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .sidebar-footer p {
+    color: rgba(255,255,255,0.3); font-size: 0.68rem; line-height: 1.5;
+  }
+
+  /* ── Main Wrapper ───────────────────────────────────────────────────── */
+  .main-wrap {
+    margin-left: 260px;
+    min-height: 100vh;
+    display: flex; flex-direction: column;
+  }
+
+  /* ── Header ─────────────────────────────────────────────────────────── */
+  .top-header {
+    position: sticky; top: 0; z-index: 50;
+    background: var(--bg);
+    padding: 1rem 2rem;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem;
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(12px);
+  }
+  .top-header h1 {
+    font-size: 1.3rem; font-weight: 800; color: var(--text);
+    letter-spacing: -0.02em;
+  }
+  .top-header .subtitle {
+    font-size: 0.78rem; color: var(--muted); font-weight: 500;
+  }
+  .header-actions { display: flex; align-items: center; gap: 0.6rem; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    padding: 0.5rem 1rem;
+    border-radius: 10px;
+    font-size: 0.82rem; font-weight: 600; font-family: var(--font);
+    cursor: pointer; border: none;
+    transition: all 0.2s;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { opacity: 0.88; box-shadow: 0 4px 14px rgba(67,24,255,0.3); }
+  .btn-ghost {
+    background: var(--card); color: var(--text-sec);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { background: var(--bg); }
+  .btn svg { width: 16px; height: 16px; }
+  .hamburger {
+    display: none; background: none; border: none;
+    color: var(--text); cursor: pointer; padding: 0.3rem;
+  }
+  .hamburger svg { width: 24px; height: 24px; }
+
+  /* ── Content ────────────────────────────────────────────────────────── */
+  main {
+    flex: 1;
+    max-width: 1400px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 1.75rem 2rem;
+  }
+
+  /* ── Demo banner ────────────────────────────────────────────────────── */
+  .demo-banner {
+    background: var(--orange-bg); border: 1px solid rgba(255,181,71,0.3);
+    border-radius: var(--radius-sm);
+    padding: 0.65rem 1rem;
+    font-size: 0.82rem; color: var(--text-sec);
+    margin-bottom: 1.25rem;
+    display: flex; align-items: center; gap: 0.5rem;
+  }
+  .demo-banner strong { color: var(--orange); }
+
+  /* ── KPI Cards ──────────────────────────────────────────────────────── */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+  .kpi {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.4rem;
+    box-shadow: var(--shadow-sm);
+    display: flex; flex-direction: column; gap: 0.4rem;
+    transition: box-shadow 0.2s, transform 0.2s;
+  }
+  .kpi:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+  .kpi-top { display: flex; align-items: flex-start; justify-content: space-between; }
+  .kpi-icon {
+    width: 42px; height: 42px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .kpi-icon svg { width: 20px; height: 20px; }
+  .kpi-icon.accent { background: var(--accent-bg); color: var(--accent); }
+  .kpi-icon.green  { background: var(--green-bg);  color: var(--green);  }
+  .kpi-icon.red    { background: var(--red-bg);    color: var(--red);    }
+  .kpi-icon.orange { background: var(--orange-bg); color: var(--orange); }
+  .kpi-label {
+    font-size: 0.75rem; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .kpi-value {
+    font-size: 2rem; font-weight: 800; line-height: 1.1;
+    letter-spacing: -0.03em; color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+  .kpi-footer { display: flex; align-items: center; gap: 0.5rem; }
+  .kpi-trend {
+    display: inline-flex; align-items: center; gap: 0.2rem;
+    font-size: 0.75rem; font-weight: 700;
+    padding: 2px 6px; border-radius: 6px;
+  }
+  .kpi-trend.up   { background: var(--green-bg); color: var(--green); }
+  .kpi-trend.down { background: var(--red-bg);   color: var(--red);   }
+  .kpi-trend.flat { background: var(--accent-bg); color: var(--muted); }
+  .kpi-trend svg  { width: 12px; height: 12px; }
+  .kpi-sub { font-size: 0.72rem; color: var(--muted); font-weight: 500; }
+
+  /* ── Section headers ────────────────────────────────────────────────── */
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 1rem;
+  }
+  .section-header h2 {
+    font-size: 1.05rem; font-weight: 700; color: var(--text);
+    letter-spacing: -0.01em;
+  }
+  .section-header .section-badge {
+    font-size: 0.72rem; font-weight: 600; color: var(--muted);
+    background: var(--bg); padding: 4px 10px;
+    border-radius: 8px; border: 1px solid var(--border);
+  }
+
+  /* ── Chart cards ────────────────────────────────────────────────────── */
+  .chart-row {
+    display: grid; gap: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .chart-row.r-2-1  { grid-template-columns: 2fr 1fr; }
+  .chart-row.r-1-1  { grid-template-columns: 1fr 1fr; }
+  .chart-row.r-1-1-1 { grid-template-columns: 1fr 1fr 1fr; }
+  .chart-row.r-full { grid-template-columns: 1fr; }
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 1.35rem 1.5rem;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.2s;
+    min-height: 0;
+  }
+  .card:hover { box-shadow: var(--shadow-md); }
+  .card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 0.5rem;
+  }
+  .card-header h3 {
+    font-size: 0.85rem; font-weight: 700; color: var(--text-sec);
+  }
+
+  /* ── Attention cards ────────────────────────────────────────────────── */
+  .attention-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 1.25rem; margin-bottom: 1.5rem;
+  }
+  .att-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 1.15rem 1.3rem;
+    box-shadow: var(--shadow-sm);
+    border-left: 4px solid transparent;
+  }
+  .att-card.warn   { border-left-color: var(--orange); }
+  .att-card.danger { border-left-color: var(--red); }
+  .att-card.ok     { border-left-color: var(--green); }
+  .att-title {
+    font-size: 0.78rem; font-weight: 600; color: var(--muted);
+    margin-bottom: 0.35rem;
+    text-transform: uppercase; letter-spacing: 0.03em;
+  }
+  .att-value {
+    font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em;
+    color: var(--text);
+  }
+  .att-desc {
+    font-size: 0.75rem; color: var(--muted); font-weight: 500; margin-top: 0.25rem;
+  }
+
+  /* ── Table ──────────────────────────────────────────────────────────── */
+  .table-wrap { overflow-x: auto; border-radius: 12px; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.82rem; }
+  thead th {
+    background: var(--bg);
+    color: var(--muted); font-weight: 700;
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 0.65rem 0.85rem; text-align: left;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0;
+  }
+  thead th:first-child { border-radius: 10px 0 0 0; }
+  thead th:last-child  { border-radius: 0 10px 0 0; }
+  td {
+    padding: 0.6rem 0.85rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-sec);
+    font-family: var(--font-body);
+  }
   tr:last-child td { border-bottom: none; }
-  tr:hover td { background: var(--bg); }
-  .pill { display: inline-block; border-radius: 4px; padding: 2px 7px;
-          font-size: 0.68rem; font-weight: 700; }
-  .pill-green { background: #DCFCE7; color: #166534; }
-  .pill-red   { background: #FEE2E2; color: #991B1B; }
-  .pill-blue  { background: #DBEAFE; color: #1E40AF; }
-  footer { text-align: center; color: var(--muted); font-size: 0.72rem;
-           margin-top: 2rem; }
-  details summary { cursor: pointer; font-size: 0.82rem; font-weight: 600;
-                    color: var(--muted); padding: 0.5rem 0; user-select: none; }
-  details[open] summary { margin-bottom: 0.5rem; }
+  tbody tr { transition: background 0.15s; }
+  tbody tr:hover td { background: var(--accent-bg); }
+  .mono { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: -0.01em; }
+  .pill {
+    display: inline-flex; align-items: center;
+    padding: 3px 10px; border-radius: 8px;
+    font-size: 0.72rem; font-weight: 700;
+  }
+  .pill-green { background: var(--green-bg); color: var(--green); }
+  .pill-red   { background: var(--red-bg);   color: var(--red);   }
+  .pill-blue  { background: var(--accent-bg); color: var(--accent); }
+  .pill-orange { background: var(--orange-bg); color: var(--orange); }
+  .pill-teal  { background: rgba(13,202,240,0.1); color: #0DCAF0; }
+  .pii-note {
+    font-size: 0.72rem; color: var(--muted); margin-bottom: 0.75rem;
+    font-weight: 500; font-family: var(--font-body);
+  }
+
+  /* ── Audit ──────────────────────────────────────────────────────────── */
+  details summary {
+    cursor: pointer; font-size: 0.85rem; font-weight: 700;
+    color: var(--text-sec); padding: 0.5rem 0; user-select: none;
+    display: flex; align-items: center; gap: 0.5rem;
+    list-style: none;
+  }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::before {
+    content: '';
+    display: inline-block; width: 0; height: 0;
+    border-left: 5px solid var(--muted);
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    transition: transform 0.2s;
+  }
+  details[open] summary::before { transform: rotate(90deg); }
+  details[open] summary { margin-bottom: 0.75rem; }
+
+  /* ── Footer ─────────────────────────────────────────────────────────── */
+  footer.page-footer {
+    text-align: center; color: var(--muted);
+    font-size: 0.72rem; padding: 1.5rem 2rem 2rem;
+    font-family: var(--font-body);
+  }
+
+  /* ── Responsive ─────────────────────────────────────────────────────── */
+  @media (max-width: 1024px) {
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    .chart-row.r-2-1, .chart-row.r-1-1, .chart-row.r-1-1-1 {
+      grid-template-columns: 1fr;
+    }
+    .attention-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 768px) {
+    .sidebar { transform: translateX(-100%); }
+    .sidebar.open { transform: translateX(0); box-shadow: var(--shadow-lg); }
+    .main-wrap { margin-left: 0; }
+    .hamburger { display: block; }
+    main { padding: 1rem; }
+    .top-header { padding: 0.8rem 1rem; }
+    .kpi-grid { grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .kpi-value { font-size: 1.5rem; }
+  }
+  @media (max-width: 480px) {
+    .kpi-grid { grid-template-columns: 1fr; }
+  }
+
+  .sidebar-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.4); z-index: 99;
+  }
+  .sidebar-overlay.show { display: block; }
+
+  /* ── Scrollbar ──────────────────────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; opacity: 0.5; }
+
+  /* ── Smooth scroll ──────────────────────────────────────────────────── */
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  /* ── Chart dark-mode text ───────────────────────────────────────────── */
+  .plotly .main-svg text { fill: var(--text-sec) !important; }
 </style>
 </head>
 <body>
-<header>
-  <div>
-    <h1>📊 CreditBot Analytics</h1>
-    <div class="sub">Application readiness metrics &nbsp;·&nbsp;
-      Auto-refreshes every 60 s</div>
-  </div>
-  <button class="refresh-btn" onclick="location.reload()">↺ Refresh</button>
-</header>
-<main>
 
-{% if is_demo %}
-<div class="demo-banner">
-  ⚠️ <strong>Demo mode</strong> — Supabase is not configured.
-  Showing 60 synthetic sample applications. Connect Supabase to see live data.
-</div>
-{% endif %}
+<!-- ── Sidebar overlay (mobile) ──────────────────────────────────────── -->
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-<!-- KPIs -->
-<div class="kpi-row">
-  <div class="kpi">
-    <div class="kpi-label">Total applications</div>
-    <div class="kpi-value">{{ total }}</div>
-    <div class="kpi-sub">{{ proc_count }} fully processed</div>
-  </div>
-  <div class="kpi">
-    <div class="kpi-label">Avg completeness</div>
-    <div class="kpi-value">{{ avg_comp }}%</div>
-    <div class="kpi-sub">across processed applications</div>
-  </div>
-  <div class="kpi">
-    <div class="kpi-label">Ready for review</div>
-    <div class="kpi-value">{{ ready_rate }}%</div>
-    <div class="kpi-sub">{{ ready_count }} of {{ proc_count }}</div>
-  </div>
-  <div class="kpi">
-    <div class="kpi-label">Avg turnaround</div>
-    <div class="kpi-value">{{ avg_turn }}s</div>
-    <div class="kpi-sub">Claude extraction + validation</div>
-  </div>
-</div>
-
-<!-- Row 1: volume + donut -->
-<div class="chart-grid-2">
-  <div class="card"><div id="chart-volume"></div></div>
-  <div class="card"><div id="chart-ready"></div></div>
-</div>
-
-<!-- Row 2: flags + channels -->
-<div class="chart-grid-equal">
-  <div class="card"><div id="chart-flags"></div></div>
-  <div class="card"><div id="chart-channels"></div></div>
-</div>
-
-<!-- Row 3: completeness histogram -->
-<div class="full-width card">
-  <div id="chart-completeness"></div>
-</div>
-
-<!-- Recent applications table -->
-<div class="full-width card">
-  <h3>Recent applications (last 30)</h3>
-  <p style="font-size:.72rem;color:var(--muted);margin-bottom:.75rem">
-    PII fields (name, phone, address) are not shown per data-handling guardrail.
-  </p>
-  <div style="overflow-x:auto">
-  <table>
-    <thead>
-      <tr>
-        <th>Reference</th><th>Submitted</th><th>Complete</th>
-        <th>Ready</th><th>Officer</th><th>Notified via</th><th>Turnaround</th>
-      </tr>
-    </thead>
-    <tbody>
-    {% for row in table_rows %}
-    <tr>
-      <td style="font-family:monospace;font-size:.75rem">{{ row.ref }}</td>
-      <td>{{ row.submitted }}</td>
-      <td>{{ row.completeness }}</td>
-      <td>
-        {% if row.ready == "Yes" %}
-          <span class="pill pill-green">Yes</span>
-        {% else %}
-          <span class="pill pill-red">No</span>
-        {% endif %}
-      </td>
-      <td>{{ row.officer or "—" }}</td>
-      <td>
-        {% if row.channel %}
-          <span class="pill pill-blue">{{ row.channel }}</span>
-        {% else %}—{% endif %}
-      </td>
-      <td>{{ row.turnaround }}</td>
-    </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  </div>
-</div>
-
-<!-- Audit log -->
-<div class="full-width card">
-  <details>
-    <summary>🔒 Audit log (last 50 events)</summary>
-    {% if audit_rows %}
-    <div style="overflow-x:auto">
-    <table>
-      <thead>
-        <tr><th>Timestamp</th><th>Event</th><th>Actor</th><th>Payload</th></tr>
-      </thead>
-      <tbody>
-      {% for ev in audit_rows %}
-      <tr>
-        <td style="white-space:nowrap;font-size:.75rem">{{ ev.ts }}</td>
-        <td><span class="pill pill-blue">{{ ev.event_type }}</span></td>
-        <td>{{ ev.actor }}</td>
-        <td style="font-family:monospace;font-size:.72rem;max-width:320px;
-                   overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-          {{ ev.payload }}</td>
-      </tr>
-      {% endfor %}
-      </tbody>
-    </table>
+<!-- ── Sidebar ────────────────────────────────────────────────────────── -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <div class="logo">CB</div>
+    <div>
+      <div class="brand-text">CreditBot</div>
+      <div class="brand-sub">Analytics Dashboard</div>
     </div>
-    {% else %}
-    <p style="color:var(--muted);font-size:.82rem;padding:.5rem 0">
-      No audit events recorded yet (or Supabase not connected).
-    </p>
-    {% endif %}
-  </details>
-</div>
+  </div>
+  <div class="sidebar-divider"></div>
+  <nav class="sidebar-nav">
+    <a href="#overview" class="active" data-section="overview">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      Overview
+    </a>
+    <a href="#analytics" data-section="analytics">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 5-6"/></svg>
+      Analytics
+    </a>
+    <a href="#applications" data-section="applications">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      Applications
+    </a>
+    <a href="#audit" data-section="audit">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Audit Log
+    </a>
+  </nav>
+  <div class="sidebar-footer">
+    <p>Readiness metrics only.<br>No lending decisions are recorded.</p>
+  </div>
+</aside>
 
-</main>
-<footer>CreditBot Analytics &nbsp;·&nbsp; This dashboard shows readiness
-metrics only — no lending decisions are recorded here.</footer>
+<!-- ── Main ───────────────────────────────────────────────────────────── -->
+<div class="main-wrap">
+  <header class="top-header">
+    <div style="display:flex;align-items:center;gap:0.75rem">
+      <button class="hamburger" id="menuBtn" aria-label="Toggle menu">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <div>
+        <h1>Dashboard</h1>
+        <div class="subtitle">Application readiness overview &middot; Auto-refreshes every 60s</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-ghost" id="themeBtn" title="Toggle theme">
+        <svg id="themeIcon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      </button>
+      <button class="btn btn-primary" onclick="location.reload()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Refresh
+      </button>
+    </div>
+  </header>
+
+  <main>
+
+    {% if is_demo %}
+    <div class="demo-banner">
+      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span><strong>Demo mode</strong> &mdash; Supabase not configured. Showing 60 synthetic sample applications.</span>
+    </div>
+    {% endif %}
+
+    <!-- ── KPI cards ──────────────────────────────────────────────────── -->
+    <section id="overview">
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="kpi-top">
+          <div>
+            <div class="kpi-label">Total applications</div>
+            <div class="kpi-value">{{ total }}</div>
+          </div>
+          <div class="kpi-icon accent">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+          </div>
+        </div>
+        <div class="kpi-footer">
+          <span class="kpi-trend {{ vol_trend_dir }}">
+            {% if vol_trend_dir == 'up' %}<svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 2l4 5H2z"/></svg>{% elif vol_trend_dir == 'down' %}<svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 10L2 5h8z"/></svg>{% else %}&mdash;{% endif %}
+            {{ vol_trend }}%
+          </span>
+          <span class="kpi-sub">{{ proc_count }} processed</span>
+        </div>
+      </div>
+
+      <div class="kpi">
+        <div class="kpi-top">
+          <div>
+            <div class="kpi-label">Avg completeness</div>
+            <div class="kpi-value">{{ avg_comp }}%</div>
+          </div>
+          <div class="kpi-icon green">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+        </div>
+        <div class="kpi-footer">
+          <span class="kpi-trend {{ comp_trend_dir }}">
+            {% if comp_trend_dir == 'up' %}<svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 2l4 5H2z"/></svg>{% elif comp_trend_dir == 'down' %}<svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 10L2 5h8z"/></svg>{% else %}&mdash;{% endif %}
+            {{ comp_trend }}%
+          </span>
+          <span class="kpi-sub">across processed apps</span>
+        </div>
+      </div>
+
+      <div class="kpi">
+        <div class="kpi-top">
+          <div>
+            <div class="kpi-label">Ready for review</div>
+            <div class="kpi-value">{{ ready_rate }}%</div>
+          </div>
+          <div class="kpi-icon orange">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+        </div>
+        <div class="kpi-footer">
+          <span class="kpi-trend {{ ready_trend_dir }}">
+            {% if ready_trend_dir == 'up' %}<svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 2l4 5H2z"/></svg>{% elif ready_trend_dir == 'down' %}<svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 10L2 5h8z"/></svg>{% else %}&mdash;{% endif %}
+            {{ ready_trend }}%
+          </span>
+          <span class="kpi-sub">{{ ready_count }} of {{ proc_count }}</span>
+        </div>
+      </div>
+
+      <div class="kpi">
+        <div class="kpi-top">
+          <div>
+            <div class="kpi-label">Avg turnaround</div>
+            <div class="kpi-value">{{ avg_turn }}s</div>
+          </div>
+          <div class="kpi-icon red">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          </div>
+        </div>
+        <div class="kpi-footer">
+          <span class="kpi-trend {{ turn_trend_dir }}">
+            {% if turn_trend_dir == 'up' %}<svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 10L2 5h8z"/></svg>{% elif turn_trend_dir == 'down' %}<svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 2l4 5H2z"/></svg>{% else %}&mdash;{% endif %}
+            {{ turn_trend }}%
+          </span>
+          <span class="kpi-sub">Claude extraction + validation</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Attention section ──────────────────────────────────────────── -->
+    <div class="attention-grid">
+      <div class="att-card {{ 'ok' if flagged_count == 0 else ('danger' if blocker_count > 0 else 'warn') }}">
+        <div class="att-title">Flagged applications</div>
+        <div class="att-value">{{ flagged_count }}</div>
+        <div class="att-desc">{{ blocker_count }} with blocker-level flags</div>
+      </div>
+      <div class="att-card {{ 'ok' if below_threshold == 0 else 'warn' }}">
+        <div class="att-title">Below threshold</div>
+        <div class="att-value">{{ below_threshold }}</div>
+        <div class="att-desc">Completeness &lt; 75%</div>
+      </div>
+      <div class="att-card ok">
+        <div class="att-title">Delivery success</div>
+        <div class="att-value">{{ delivery_rate }}%</div>
+        <div class="att-desc">Notifications delivered</div>
+      </div>
+    </div>
+    </section>
+
+    <!-- ── Analytics ──────────────────────────────────────────────────── -->
+    <section id="analytics">
+    <div class="section-header">
+      <h2>Analytics</h2>
+      <span class="section-badge">Last 30 days</span>
+    </div>
+
+    <div class="chart-row r-2-1">
+      <div class="card"><div id="chart-volume"></div></div>
+      <div class="card"><div id="chart-ready"></div></div>
+    </div>
+
+    <div class="chart-row r-1-1">
+      <div class="card"><div id="chart-flags"></div></div>
+      <div class="card"><div id="chart-channels"></div></div>
+    </div>
+
+    <div class="chart-row r-1-1-1">
+      <div class="card"><div id="chart-completeness"></div></div>
+      <div class="card"><div id="chart-gender"></div></div>
+      <div class="card"><div id="chart-turnaround"></div></div>
+    </div>
+    </section>
+
+    <!-- ── Applications table ─────────────────────────────────────────── -->
+    <section id="applications" style="margin-top:0.5rem">
+    <div class="section-header">
+      <h2>Recent Applications</h2>
+      <span class="section-badge">Last 30</span>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:1rem 1.25rem 0">
+        <p class="pii-note">PII fields (name, phone, address) are not shown per data-handling guardrail.</p>
+      </div>
+      <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Reference</th><th>Submitted</th><th>Complete</th>
+            <th>Ready</th><th>Officer</th><th>Notified via</th><th>Turnaround</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for row in table_rows %}
+        <tr>
+          <td class="mono">{{ row.ref }}</td>
+          <td>{{ row.submitted }}</td>
+          <td>{{ row.completeness }}</td>
+          <td>
+            {% if row.ready == "Yes" %}
+              <span class="pill pill-green">Ready</span>
+            {% else %}
+              <span class="pill pill-red">Not ready</span>
+            {% endif %}
+          </td>
+          <td>{% if row.officer %}{{ row.officer }}{% else %}&mdash;{% endif %}</td>
+          <td>
+            {% if row.channel == "telegram" %}
+              <span class="pill pill-blue">Telegram</span>
+            {% elif row.channel == "whatsapp" %}
+              <span class="pill pill-green">WhatsApp</span>
+            {% elif row.channel == "sms" %}
+              <span class="pill pill-orange">SMS</span>
+            {% elif row.channel == "email" %}
+              <span class="pill pill-teal">Email</span>
+            {% elif row.channel %}
+              <span class="pill pill-blue">{{ row.channel }}</span>
+            {% else %}&mdash;{% endif %}
+          </td>
+          <td class="mono">{{ row.turnaround }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+    </section>
+
+    <!-- ── Audit log ──────────────────────────────────────────────────── -->
+    <section id="audit" style="margin-top:1.5rem">
+    <div class="card">
+      <details>
+        <summary>Audit log (last 50 events)</summary>
+        {% if audit_rows %}
+        <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Timestamp</th><th>Event</th><th>Actor</th><th>Payload</th></tr>
+          </thead>
+          <tbody>
+          {% for ev in audit_rows %}
+          <tr>
+            <td class="mono" style="white-space:nowrap">{{ ev.ts }}</td>
+            <td><span class="pill pill-blue">{{ ev.event_type }}</span></td>
+            <td>{{ ev.actor }}</td>
+            <td class="mono" style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              {{ ev.payload }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        </div>
+        {% else %}
+        <p style="color:var(--muted);font-size:.82rem;padding:.5rem 0">
+          No audit events recorded yet (or Supabase not connected).
+        </p>
+        {% endif %}
+      </details>
+    </div>
+    </section>
+
+  </main>
+
+  <footer class="page-footer">
+    CreditBot Analytics &middot; This dashboard shows readiness metrics only &mdash; no lending decisions are recorded here.
+  </footer>
+</div>
 
 <script>
-const config = {responsive: true, displayModeBar: false};
-Plotly.newPlot('chart-volume',   {{ volume_json   | safe }});
-Plotly.newPlot('chart-ready',    {{ ready_json    | safe }});
-Plotly.newPlot('chart-flags',    {{ flags_json    | safe }});
-Plotly.newPlot('chart-channels', {{ channels_json | safe }});
-Plotly.newPlot('chart-completeness', {{ completeness_json | safe }});
+/* ── Charts ──────────────────────────────────────────────────────────── */
+const cfg = {responsive: true, displayModeBar: false};
+const isDark = () => document.documentElement.dataset.theme === 'dark' ||
+  (!document.documentElement.dataset.theme &&
+   window.matchMedia('(prefers-color-scheme: dark)').matches);
 
-// Auto-refresh every 60 s
+function themeLayout(layout) {
+  const c = isDark() ? '#A3AED0' : '#2B3674';
+  const g = isDark() ? 'rgba(163,174,208,0.08)' : 'rgba(163,174,208,0.15)';
+  layout.font = Object.assign(layout.font || {}, {color: c});
+  if (layout.xaxis) layout.xaxis.gridcolor = g;
+  if (layout.yaxis) layout.yaxis.gridcolor = g;
+  return layout;
+}
+
+function renderChart(id, spec) {
+  if (!spec || !spec.data) return;
+  spec.layout = themeLayout(spec.layout || {});
+  Plotly.newPlot(id, spec.data, spec.layout, cfg);
+}
+
+const charts = {
+  'chart-volume':       {{ volume_json       | safe }},
+  'chart-ready':        {{ ready_json        | safe }},
+  'chart-flags':        {{ flags_json        | safe }},
+  'chart-channels':     {{ channels_json     | safe }},
+  'chart-completeness': {{ completeness_json | safe }},
+  'chart-gender':       {{ gender_json       | safe }},
+  'chart-turnaround':   {{ turnaround_json   | safe }}
+};
+Object.entries(charts).forEach(([id, spec]) => renderChart(id, spec));
+
+/* ── Theme toggle ────────────────────────────────────────────────────── */
+const themeBtn = document.getElementById('themeBtn');
+const themeIcon = document.getElementById('themeIcon');
+const sunPath = '<circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>';
+const moonPath = '<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>';
+
+function applyTheme(dark) {
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  themeIcon.innerHTML = dark ? moonPath : sunPath;
+  try { localStorage.setItem('cb-theme', dark ? 'dark' : 'light'); } catch(e) {}
+  Object.entries(charts).forEach(([id, spec]) => renderChart(id, spec));
+}
+try {
+  const saved = localStorage.getItem('cb-theme');
+  if (saved) applyTheme(saved === 'dark');
+} catch(e) {}
+themeBtn.addEventListener('click', () => applyTheme(!isDark()));
+
+/* ── Sidebar toggle (mobile) ─────────────────────────────────────────── */
+const sidebar = document.getElementById('sidebar');
+const overlay = document.getElementById('sidebarOverlay');
+const menuBtn = document.getElementById('menuBtn');
+menuBtn.addEventListener('click', () => {
+  sidebar.classList.toggle('open');
+  overlay.classList.toggle('show');
+});
+overlay.addEventListener('click', () => {
+  sidebar.classList.remove('open');
+  overlay.classList.remove('show');
+});
+
+/* ── Active nav tracking ─────────────────────────────────────────────── */
+const navLinks = document.querySelectorAll('.sidebar-nav a[data-section]');
+const sections = {};
+navLinks.forEach(a => {
+  const id = a.dataset.section;
+  const el = document.getElementById(id);
+  if (el) sections[id] = {el, link: a};
+});
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const match = Object.values(sections).find(s => s.el === e.target);
+      if (match) match.link.classList.add('active');
+    }
+  });
+}, {rootMargin: '-80px 0px -60% 0px'});
+Object.values(sections).forEach(s => observer.observe(s.el));
+
+navLinks.forEach(a => a.addEventListener('click', () => {
+  sidebar.classList.remove('open');
+  overlay.classList.remove('show');
+}));
+
+/* ── Auto-refresh ────────────────────────────────────────────────────── */
 setTimeout(() => location.reload(), 60000);
 </script>
 </body>
@@ -458,15 +1129,62 @@ def index():
     ready_rate  = round(ready_count / proc_count * 100, 1) if proc_count else 0
     avg_turn    = round(processed["turnaround_seconds"].mean(), 1) if proc_count else 0
 
+    # Trend calculations (recent 15 days vs previous 15 days)
+    now_utc = pd.Timestamp.now(tz="UTC")
+    mid = now_utc - pd.Timedelta(days=15)
+    recent_apps = apps_df[apps_df["created_at"] >= mid] if not apps_df.empty else apps_df
+    prev_apps   = apps_df[(apps_df["created_at"] < mid)] if not apps_df.empty else apps_df
+    recent_proc = processed[processed["created_at"] >= mid] if proc_count else processed
+    prev_proc   = processed[processed["created_at"] < mid] if proc_count else processed
+
+    def _trend(recent_val, prev_val):
+        if prev_val == 0:
+            return (0.0, "flat") if recent_val == 0 else (100.0, "up")
+        pct = round((recent_val - prev_val) / abs(prev_val) * 100, 1)
+        pct = max(-999, min(999, pct))
+        return (abs(pct), "up" if pct > 0 else ("down" if pct < 0 else "flat"))
+
+    vol_trend, vol_trend_dir = _trend(len(recent_apps), len(prev_apps))
+    r_comp = recent_proc["completeness_pct"].mean() if len(recent_proc) else 0
+    p_comp = prev_proc["completeness_pct"].mean() if len(prev_proc) else 0
+    comp_trend, comp_trend_dir = _trend(r_comp, p_comp)
+    r_ready = (recent_proc["ready_for_underwriting"].sum() / max(len(recent_proc), 1) * 100) if len(recent_proc) else 0
+    p_ready = (prev_proc["ready_for_underwriting"].sum() / max(len(prev_proc), 1) * 100) if len(prev_proc) else 0
+    ready_trend, ready_trend_dir = _trend(r_ready, p_ready)
+    r_turn = recent_proc["turnaround_seconds"].mean() if len(recent_proc) else 0
+    p_turn = prev_proc["turnaround_seconds"].mean() if len(prev_proc) else 0
+    turn_trend, turn_trend_dir = _trend(r_turn, p_turn)
+    # For turnaround, lower is better — flip direction
+    if turn_trend_dir == "up":
+        turn_trend_dir = "down"
+    elif turn_trend_dir == "down":
+        turn_trend_dir = "up"
+
+    # Attention metrics
+    flagged_count = 0
+    blocker_count = 0
+    if proc_count and "flags" in processed.columns:
+        for flags_val in processed["flags"].dropna():
+            items = flags_val if isinstance(flags_val, list) else []
+            if items:
+                flagged_count += 1
+                if any((f.get("severity") == "blocker" if isinstance(f, dict) else False) for f in items):
+                    blocker_count += 1
+    below_threshold = int((processed["completeness_pct"] < 75).sum()) if proc_count else 0
+    notified = processed[processed["notification_channel"].notna() & (processed["notification_channel"] != "none")] if proc_count else processed
+    delivered = processed[processed.get("notification_status", pd.Series()) == "delivered"] if proc_count and "notification_status" in processed.columns else pd.DataFrame()
+    delivery_rate = round(len(delivered) / max(len(notified), 1) * 100, 1) if proc_count else 0
+
     # Charts
-    volume_json      = chart_volume(apps_df) if not apps_df.empty else "{}"
-    ready_json       = chart_ready(processed) if proc_count else "{}"
-    flags_json       = chart_flags(processed) if proc_count else "{}"
-    channels_json    = chart_channels(processed) if proc_count else "{}"
+    volume_json       = chart_volume(apps_df) if not apps_df.empty else "{}"
+    ready_json        = chart_ready(processed) if proc_count else "{}"
+    flags_json        = chart_flags(processed) if proc_count else "{}"
+    channels_json     = chart_channels(processed) if proc_count else "{}"
     completeness_json = chart_completeness(processed) if proc_count else "{}"
+    gender_json       = chart_gender(processed) if proc_count else "{}"
+    turnaround_json   = chart_turnaround(apps_df) if not apps_df.empty else "{}"
 
     def _extract_chart(j):
-        """Plotly.newPlot expects {data, layout} not the full JSON spec."""
         obj = json.loads(j)
         return json.dumps({"data": obj.get("data", []), "layout": obj.get("layout", {})})
 
@@ -513,6 +1231,14 @@ def index():
         ready_rate=ready_rate,
         ready_count=ready_count,
         avg_turn=avg_turn,
+        vol_trend=vol_trend, vol_trend_dir=vol_trend_dir,
+        comp_trend=comp_trend, comp_trend_dir=comp_trend_dir,
+        ready_trend=ready_trend, ready_trend_dir=ready_trend_dir,
+        turn_trend=turn_trend, turn_trend_dir=turn_trend_dir,
+        flagged_count=flagged_count,
+        blocker_count=blocker_count,
+        below_threshold=below_threshold,
+        delivery_rate=delivery_rate,
         table_rows=table_rows,
         audit_rows=audit_rows,
         volume_json=_extract_chart(volume_json) if proc_count or not apps_df.empty else "{}",
@@ -520,6 +1246,8 @@ def index():
         flags_json=_extract_chart(flags_json) if proc_count else "{}",
         channels_json=_extract_chart(channels_json) if proc_count else "{}",
         completeness_json=_extract_chart(completeness_json) if proc_count else "{}",
+        gender_json=_extract_chart(gender_json) if proc_count else "{}",
+        turnaround_json=_extract_chart(turnaround_json) if proc_count or not apps_df.empty else "{}",
     )
     return Response(html, mimetype="text/html")
 
