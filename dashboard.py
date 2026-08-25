@@ -447,7 +447,7 @@ def index():
         apps_df["date"] = apps_df["created_at"].dt.date
         apps_df["completeness_pct"] = pd.to_numeric(apps_df["completeness_pct"], errors="coerce").fillna(0)
         apps_df["turnaround_seconds"] = pd.to_numeric(apps_df["turnaround_seconds"], errors="coerce").fillna(0)
-        apps_df["ready_for_underwriting"] = apps_df["ready_for_underwriting"].astype(bool)
+        apps_df["ready_for_underwriting"] = apps_df["ready_for_underwriting"].fillna(False).astype(bool)
 
     processed = apps_df[apps_df["status"] == "processed"] if not apps_df.empty else apps_df
 
@@ -478,7 +478,7 @@ def index():
             "ref":         r.get("reference_number", ""),
             "submitted":   ts.strftime("%Y-%m-%d %H:%M") if pd.notna(ts) else "—",
             "completeness": f"{r['completeness_pct']:.1f}%",
-            "ready":       "Yes" if r["ready_for_underwriting"] else "No",
+            "ready":       "Yes" if pd.notna(r["ready_for_underwriting"]) and r["ready_for_underwriting"] else "No",
             "officer":     r.get("officer_code") or "",
             "channel":     r.get("notification_channel") or "",
             "turnaround":  f"{r['turnaround_seconds']:.1f}s",
