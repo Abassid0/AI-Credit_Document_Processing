@@ -370,17 +370,19 @@ async def finalize(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     elapsed = time.monotonic() - start_time
 
     # ── Applicant-facing confirmation (simple, no technical details) ─────
+    channels = "here on Telegram"
+    if phone_number:
+        channels += ", via SMS"
+    if email:
+        channels += ", or by email"
     applicant_msg = (
-        f"✅ Thank you, {(declared_name or '').split()[0] or 'Applicant'}! "
-        "All your documents have been uploaded successfully.\n\n"
+        "✅ Your application has been submitted.\n"
         f"Your reference number is: *{reference}*\n\n"
-        "A credit officer will review your documents and get back to you "
-        "here on Telegram"
-        + (", via SMS" if phone_number else "")
-        + (", or by email" if email else "")
-        + ". This typically takes 1–3 business days.\n\n"
-        "Please keep your reference number safe — you may need it for "
-        "follow-up inquiries."
+        f"A credit officer will review your documents and send you an "
+        f"update {channels} once their review is complete. "
+        "This typically takes less than 24 hours.\n\n"
+        "Nothing in this is an approval or rejection — all decisions "
+        "are made by a human officer."
     )
 
     await update.message.reply_text(applicant_msg, parse_mode="Markdown")
