@@ -132,7 +132,7 @@ def chart_volume(df: pd.DataFrame) -> str:
                   title="Applications per day")
     fig.update_traces(line_width=2.5, fillcolor="rgba(67,24,255,0.08)",
                       line_shape="spline")
-    fig.update_layout(**PLOTLY_THEME, height=260)
+    fig.update_layout(**PLOTLY_THEME, height=280)
     fig.update_xaxes(showgrid=False)
     fig.update_yaxes(showgrid=True, gridcolor="rgba(163,174,208,0.15)")
     return fig_to_json(fig)
@@ -150,7 +150,7 @@ def chart_ready(processed: pd.DataFrame) -> str:
         textfont_size=13,
         pull=[0.02, 0],
     ))
-    fig.update_layout(**PLOTLY_THEME, height=260, title="Readiness split",
+    fig.update_layout(**PLOTLY_THEME, height=280, title="Readiness split",
                       showlegend=False)
     return fig_to_json(fig)
 
@@ -182,7 +182,7 @@ def chart_flags(processed: pd.DataFrame) -> str:
         fig = go.Figure()
         fig.add_annotation(text="No flags raised", x=0.5, y=0.5, showarrow=False,
                            font_size=16, font_color="#A3AED0")
-        fig.update_layout(**PLOTLY_THEME, height=260, title="Common flags")
+        fig.update_layout(**PLOTLY_THEME, height=280, title="Common flags")
         return fig_to_json(fig)
     flag_df = (
         pd.DataFrame(list(flag_counts.items()), columns=["flag", "count"])
@@ -205,7 +205,7 @@ def chart_channels(processed: pd.DataFrame) -> str:
         fig = go.Figure()
         fig.add_annotation(text="No notifications sent", x=0.5, y=0.5, showarrow=False,
                            font_size=16, font_color="#A3AED0")
-        fig.update_layout(**PLOTLY_THEME, height=260, title="Notification channels")
+        fig.update_layout(**PLOTLY_THEME, height=280, title="Notification channels")
         return fig_to_json(fig)
     ch_counts = notified["notification_channel"].value_counts().reset_index()
     ch_counts.columns = ["channel", "count"]
@@ -217,7 +217,7 @@ def chart_channels(processed: pd.DataFrame) -> str:
                  color_discrete_map=color_map,
                  labels={"channel": "", "count": "Sent"},
                  title="Notification channels")
-    fig.update_layout(**PLOTLY_THEME, height=260, showlegend=False)
+    fig.update_layout(**PLOTLY_THEME, height=280, showlegend=False)
     fig.update_xaxes(showgrid=False)
     fig.update_yaxes(showgrid=True, gridcolor="rgba(163,174,208,0.15)")
     fig.update_traces(marker_line_width=0, marker_cornerradius=6)
@@ -232,7 +232,7 @@ def chart_completeness(processed: pd.DataFrame) -> str:
     fig.add_vline(x=75, line_dash="dash", line_color=RED, line_width=1.5,
                   annotation_text="75% threshold", annotation_position="top right",
                   annotation_font_color=RED)
-    fig.update_layout(**PLOTLY_THEME, height=260)
+    fig.update_layout(**PLOTLY_THEME, height=280)
     fig.update_xaxes(showgrid=False)
     fig.update_yaxes(showgrid=True, gridcolor="rgba(163,174,208,0.15)")
     fig.update_traces(marker_line_width=0, marker_cornerradius=4)
@@ -244,7 +244,7 @@ def chart_gender(processed: pd.DataFrame) -> str:
         fig = go.Figure()
         fig.add_annotation(text="No gender data", x=0.5, y=0.5, showarrow=False,
                            font_size=16, font_color="#A3AED0")
-        fig.update_layout(**PLOTLY_THEME, height=260, title="Gender distribution")
+        fig.update_layout(**PLOTLY_THEME, height=280, title="Gender distribution")
         return fig_to_json(fig)
     gender_counts = processed["declared_gender"].value_counts().reset_index()
     gender_counts.columns = ["gender", "count"]
@@ -257,7 +257,7 @@ def chart_gender(processed: pd.DataFrame) -> str:
         textinfo="percent+label",
         textfont_size=12,
     ))
-    fig.update_layout(**PLOTLY_THEME, height=260, title="Gender distribution",
+    fig.update_layout(**PLOTLY_THEME, height=280, title="Gender distribution",
                       showlegend=False)
     return fig_to_json(fig)
 
@@ -271,7 +271,7 @@ def chart_turnaround(df: pd.DataFrame) -> str:
     fig.update_traces(line_width=2.5, mode="lines+markers",
                       marker=dict(size=6, color=GREEN),
                       line_shape="spline")
-    fig.update_layout(**PLOTLY_THEME, height=260)
+    fig.update_layout(**PLOTLY_THEME, height=280)
     fig.update_xaxes(showgrid=False)
     fig.update_yaxes(showgrid=True, gridcolor="rgba(163,174,208,0.15)")
     return fig_to_json(fig)
@@ -294,7 +294,6 @@ HTML = r"""<!DOCTYPE html>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* ── Tokens ────────────────────────────────────────────────────────── */
   :root {
     --bg:         #F4F7FE;
     --card:       #FFFFFF;
@@ -311,12 +310,11 @@ HTML = r"""<!DOCTYPE html>
     --orange:     #FFB547;
     --orange-bg:  rgba(255,181,71,0.08);
     --info:       #2B77E7;
+    --info-bg:    rgba(43,119,231,0.08);
     --sidebar:    #1B2559;
-    --sidebar-hover: rgba(255,255,255,0.08);
-    --sidebar-active: rgba(255,255,255,0.12);
     --shadow-sm:  0 1px 3px rgba(27,37,89,0.04);
-    --shadow-md:  0 4px 12px rgba(27,37,89,0.06);
-    --shadow-lg:  0 8px 24px rgba(27,37,89,0.08);
+    --shadow-md:  0 4px 14px rgba(27,37,89,0.07);
+    --shadow-lg:  0 8px 28px rgba(27,37,89,0.10);
     --radius:     16px;
     --radius-sm:  10px;
     --font:       'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
@@ -336,9 +334,10 @@ HTML = r"""<!DOCTYPE html>
       --green-bg:   rgba(1,181,116,0.15);
       --red-bg:     rgba(238,93,80,0.15);
       --orange-bg:  rgba(255,181,71,0.12);
+      --info-bg:    rgba(43,119,231,0.12);
       --shadow-sm:  0 1px 3px rgba(0,0,0,0.2);
-      --shadow-md:  0 4px 12px rgba(0,0,0,0.25);
-      --shadow-lg:  0 8px 24px rgba(0,0,0,0.3);
+      --shadow-md:  0 4px 14px rgba(0,0,0,0.25);
+      --shadow-lg:  0 8px 28px rgba(0,0,0,0.3);
     }
   }
   :root[data-theme="dark"] {
@@ -352,12 +351,12 @@ HTML = r"""<!DOCTYPE html>
     --green-bg:   rgba(1,181,116,0.15);
     --red-bg:     rgba(238,93,80,0.15);
     --orange-bg:  rgba(255,181,71,0.12);
+    --info-bg:    rgba(43,119,231,0.12);
     --shadow-sm:  0 1px 3px rgba(0,0,0,0.2);
-    --shadow-md:  0 4px 12px rgba(0,0,0,0.25);
-    --shadow-lg:  0 8px 24px rgba(0,0,0,0.3);
+    --shadow-md:  0 4px 14px rgba(0,0,0,0.25);
+    --shadow-lg:  0 8px 28px rgba(0,0,0,0.3);
   }
 
-  /* ── Base ───────────────────────────────────────────────────────────── */
   body {
     background: var(--bg);
     color: var(--text);
@@ -368,52 +367,53 @@ HTML = r"""<!DOCTYPE html>
     -webkit-font-smoothing: antialiased;
   }
 
-  /* ── Sidebar ────────────────────────────────────────────────────────── */
+  /* ── Sidebar ──────────────────────────────────────────────────────── */
   .sidebar {
     position: fixed; top: 0; left: 0; bottom: 0;
     width: 260px;
-    background: linear-gradient(135deg, #1B2559 0%, #111C44 100%);
+    background: linear-gradient(180deg, #1B2559 0%, #111C44 100%);
     display: flex; flex-direction: column;
     z-index: 100;
     transition: transform 0.3s cubic-bezier(.4,0,.2,1);
   }
   .sidebar-brand {
-    padding: 1.5rem 1.5rem 1.2rem;
+    padding: 1.75rem 1.5rem 1.5rem;
     display: flex; align-items: center; gap: 0.75rem;
   }
   .sidebar-brand .logo {
-    width: 38px; height: 38px;
+    width: 40px; height: 40px;
     background: var(--accent);
     border-radius: 12px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 1.15rem; color: #fff; font-weight: 800;
+    font-size: 1.1rem; color: #fff; font-weight: 800;
   }
   .sidebar-brand .brand-text {
-    color: #FFFFFF; font-weight: 700; font-size: 1.05rem;
+    color: #FFFFFF; font-weight: 700; font-size: 1.1rem;
     letter-spacing: -0.01em;
   }
   .sidebar-brand .brand-sub {
-    color: rgba(255,255,255,0.45); font-size: 0.68rem;
-    font-weight: 500; margin-top: 1px;
+    color: rgba(255,255,255,0.4); font-size: 0.7rem;
+    font-weight: 500; margin-top: 2px;
   }
   .sidebar-divider {
-    height: 1px; background: rgba(255,255,255,0.08);
-    margin: 0.25rem 1.25rem 0.75rem;
+    height: 1px; background: rgba(255,255,255,0.06);
+    margin: 0 1.25rem 0.75rem;
   }
   .sidebar-nav { flex: 1; padding: 0 0.75rem; }
   .sidebar-nav a {
     display: flex; align-items: center; gap: 0.8rem;
     padding: 0.7rem 0.85rem;
     border-radius: 12px;
-    color: rgba(255,255,255,0.55);
+    color: rgba(255,255,255,0.5);
     text-decoration: none;
     font-size: 0.85rem; font-weight: 500;
     transition: all 0.2s;
     margin-bottom: 2px;
+    position: relative;
   }
-  .sidebar-nav a:hover { background: var(--sidebar-hover); color: rgba(255,255,255,0.85); }
+  .sidebar-nav a:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.8); }
   .sidebar-nav a.active {
-    background: var(--sidebar-active);
+    background: rgba(255,255,255,0.1);
     color: #FFFFFF; font-weight: 600;
   }
   .sidebar-nav a.active::before {
@@ -421,7 +421,6 @@ HTML = r"""<!DOCTYPE html>
     width: 4px; height: 24px; border-radius: 0 4px 4px 0;
     background: var(--accent);
   }
-  .sidebar-nav a { position: relative; }
   .sidebar-nav svg { width: 20px; height: 20px; flex-shrink: 0; opacity: 0.7; }
   .sidebar-nav a.active svg { opacity: 1; }
   .sidebar-footer {
@@ -429,32 +428,33 @@ HTML = r"""<!DOCTYPE html>
     border-top: 1px solid rgba(255,255,255,0.06);
   }
   .sidebar-footer p {
-    color: rgba(255,255,255,0.3); font-size: 0.68rem; line-height: 1.5;
+    color: rgba(255,255,255,0.25); font-size: 0.68rem; line-height: 1.5;
   }
 
-  /* ── Main Wrapper ───────────────────────────────────────────────────── */
+  /* ── Main ─────────────────────────────────────────────────────────── */
   .main-wrap {
     margin-left: 260px;
     min-height: 100vh;
     display: flex; flex-direction: column;
   }
 
-  /* ── Header ─────────────────────────────────────────────────────────── */
+  /* ── Header ───────────────────────────────────────────────────────── */
   .top-header {
     position: sticky; top: 0; z-index: 50;
     background: var(--bg);
-    padding: 1rem 2rem;
+    padding: 1.1rem 2.25rem;
     display: flex; align-items: center; justify-content: space-between;
     gap: 1rem;
     border-bottom: 1px solid var(--border);
     backdrop-filter: blur(12px);
   }
   .top-header h1 {
-    font-size: 1.3rem; font-weight: 800; color: var(--text);
+    font-size: 1.35rem; font-weight: 800; color: var(--text);
     letter-spacing: -0.02em;
   }
   .top-header .subtitle {
     font-size: 0.78rem; color: var(--muted); font-weight: 500;
+    margin-top: 2px;
   }
   .header-actions { display: flex; align-items: center; gap: 0.6rem; }
   .btn {
@@ -479,45 +479,50 @@ HTML = r"""<!DOCTYPE html>
   }
   .hamburger svg { width: 24px; height: 24px; }
 
-  /* ── Content ────────────────────────────────────────────────────────── */
+  /* ── Content ──────────────────────────────────────────────────────── */
   main {
     flex: 1;
-    max-width: 1400px;
+    max-width: 1440px;
     width: 100%;
     margin: 0 auto;
-    padding: 1.75rem 2rem;
+    padding: 2rem 2.25rem;
   }
 
-  /* ── Demo banner ────────────────────────────────────────────────────── */
+  /* ── Demo banner ──────────────────────────────────────────────────── */
   .demo-banner {
-    background: var(--orange-bg); border: 1px solid rgba(255,181,71,0.3);
+    background: var(--orange-bg); border: 1px solid rgba(255,181,71,0.25);
     border-radius: var(--radius-sm);
-    padding: 0.65rem 1rem;
+    padding: 0.7rem 1.15rem;
     font-size: 0.82rem; color: var(--text-sec);
-    margin-bottom: 1.25rem;
+    margin-bottom: 1.75rem;
     display: flex; align-items: center; gap: 0.5rem;
   }
   .demo-banner strong { color: var(--orange); }
 
-  /* ── KPI Cards ──────────────────────────────────────────────────────── */
+  /* ── KPI Cards ────────────────────────────────────────────────────── */
   .kpi-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 1.25rem;
-    margin-bottom: 1.5rem;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
   }
   .kpi {
     background: var(--card);
     border-radius: var(--radius);
-    padding: 1.25rem 1.4rem;
+    padding: 1.35rem 1.5rem;
     box-shadow: var(--shadow-sm);
-    display: flex; flex-direction: column; gap: 0.4rem;
+    display: flex; flex-direction: column; gap: 0.5rem;
+    border-left: 4px solid transparent;
     transition: box-shadow 0.2s, transform 0.2s;
   }
-  .kpi:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+  .kpi:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+  .kpi.kpi-accent  { border-left-color: var(--accent); }
+  .kpi.kpi-green   { border-left-color: var(--green); }
+  .kpi.kpi-orange  { border-left-color: var(--orange); }
+  .kpi.kpi-red     { border-left-color: var(--red); }
   .kpi-top { display: flex; align-items: flex-start; justify-content: space-between; }
   .kpi-icon {
-    width: 42px; height: 42px;
+    width: 44px; height: 44px;
     border-radius: 12px;
     display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;
@@ -532,15 +537,15 @@ HTML = r"""<!DOCTYPE html>
     text-transform: uppercase; letter-spacing: 0.04em;
   }
   .kpi-value {
-    font-size: 2rem; font-weight: 800; line-height: 1.1;
+    font-size: 2.1rem; font-weight: 800; line-height: 1.1;
     letter-spacing: -0.03em; color: var(--text);
     font-variant-numeric: tabular-nums;
   }
-  .kpi-footer { display: flex; align-items: center; gap: 0.5rem; }
+  .kpi-footer { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.15rem; }
   .kpi-trend {
     display: inline-flex; align-items: center; gap: 0.2rem;
     font-size: 0.75rem; font-weight: 700;
-    padding: 2px 6px; border-radius: 6px;
+    padding: 2px 8px; border-radius: 6px;
   }
   .kpi-trend.up   { background: var(--green-bg); color: var(--green); }
   .kpi-trend.down { background: var(--red-bg);   color: var(--red);   }
@@ -548,22 +553,89 @@ HTML = r"""<!DOCTYPE html>
   .kpi-trend svg  { width: 12px; height: 12px; }
   .kpi-sub { font-size: 0.72rem; color: var(--muted); font-weight: 500; }
 
-  /* ── Section headers ────────────────────────────────────────────────── */
+  /* ── Section headers ──────────────────────────────────────────────── */
   .section-header {
     display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 1rem;
+    margin-bottom: 1.25rem;
   }
   .section-header h2 {
-    font-size: 1.05rem; font-weight: 700; color: var(--text);
+    font-size: 1.1rem; font-weight: 700; color: var(--text);
     letter-spacing: -0.01em;
   }
-  .section-header .section-badge {
+  .section-badge {
     font-size: 0.72rem; font-weight: 600; color: var(--muted);
-    background: var(--bg); padding: 4px 10px;
+    background: var(--bg); padding: 4px 12px;
     border-radius: 8px; border: 1px solid var(--border);
   }
 
-  /* ── Chart cards ────────────────────────────────────────────────────── */
+  /* ── Insights section ─────────────────────────────────────────────── */
+  .insights-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 2.25rem;
+  }
+  .insight-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+  .insight-card-header {
+    padding: 1.1rem 1.5rem 0.75rem;
+    display: flex; align-items: center; gap: 0.6rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.85rem;
+  }
+  .insight-card-header h3 {
+    font-size: 0.9rem; font-weight: 700; color: var(--text);
+  }
+  .insight-card-header .ic-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .insight-card-header .ic-icon svg { width: 16px; height: 16px; }
+  .ic-icon.warn-bg { background: var(--orange-bg); color: var(--orange); }
+  .ic-icon.ok-bg   { background: var(--green-bg); color: var(--green); }
+  .ic-icon.info-bg  { background: var(--info-bg); color: var(--info); }
+  .insight-list { padding: 0.5rem 0; }
+  .insight-item {
+    display: flex; align-items: center; gap: 0.85rem;
+    padding: 0.75rem 1.5rem;
+    transition: background 0.15s;
+  }
+  .insight-item:hover { background: var(--accent-bg); }
+  .insight-dot {
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  }
+  .insight-item.danger .insight-dot { background: var(--red); }
+  .insight-item.warn .insight-dot   { background: var(--orange); }
+  .insight-item.ok .insight-dot     { background: var(--green); }
+  .insight-item.info .insight-dot   { background: var(--info); }
+  .insight-item.up .insight-dot     { background: var(--green); }
+  .insight-item.down .insight-dot   { background: var(--red); }
+  .insight-item.flat .insight-dot   { background: var(--muted); }
+  .insight-content { flex: 1; min-width: 0; }
+  .insight-title {
+    font-size: 0.84rem; font-weight: 600; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .insight-desc {
+    font-size: 0.74rem; color: var(--muted); font-weight: 500;
+    margin-top: 1px;
+  }
+  .insight-metric {
+    font-size: 0.85rem; font-weight: 700;
+    padding: 3px 10px; border-radius: 8px;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .insight-item.danger .insight-metric { background: var(--red-bg); color: var(--red); }
+  .insight-item.warn .insight-metric   { background: var(--orange-bg); color: var(--orange); }
+  .insight-item.ok .insight-metric     { background: var(--green-bg); color: var(--green); }
+  .insight-item.info .insight-metric   { background: var(--info-bg); color: var(--info); }
+
+  /* ── Chart cards ──────────────────────────────────────────────────── */
   .chart-row {
     display: grid; gap: 1.5rem;
     margin-bottom: 1.5rem;
@@ -575,63 +647,27 @@ HTML = r"""<!DOCTYPE html>
   .card {
     background: var(--card);
     border-radius: var(--radius);
-    padding: 1.35rem 1.5rem;
+    padding: 1.4rem 1.5rem;
     box-shadow: var(--shadow-sm);
     transition: box-shadow 0.2s;
-    min-height: 0;
   }
   .card:hover { box-shadow: var(--shadow-md); }
-  .card-header {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 0.5rem;
-  }
-  .card-header h3 {
-    font-size: 0.85rem; font-weight: 700; color: var(--text-sec);
-  }
 
-  /* ── Attention cards ────────────────────────────────────────────────── */
-  .attention-grid {
-    display: grid; grid-template-columns: 1fr 1fr 1fr;
-    gap: 1.25rem; margin-bottom: 1.5rem;
-  }
-  .att-card {
-    background: var(--card);
-    border-radius: var(--radius);
-    padding: 1.15rem 1.3rem;
-    box-shadow: var(--shadow-sm);
-    border-left: 4px solid transparent;
-  }
-  .att-card.warn   { border-left-color: var(--orange); }
-  .att-card.danger { border-left-color: var(--red); }
-  .att-card.ok     { border-left-color: var(--green); }
-  .att-title {
-    font-size: 0.78rem; font-weight: 600; color: var(--muted);
-    margin-bottom: 0.35rem;
-    text-transform: uppercase; letter-spacing: 0.03em;
-  }
-  .att-value {
-    font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em;
-    color: var(--text);
-  }
-  .att-desc {
-    font-size: 0.75rem; color: var(--muted); font-weight: 500; margin-top: 0.25rem;
-  }
-
-  /* ── Table ──────────────────────────────────────────────────────────── */
+  /* ── Table ────────────────────────────────────────────────────────── */
   .table-wrap { overflow-x: auto; border-radius: 12px; }
   table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.82rem; }
   thead th {
     background: var(--bg);
     color: var(--muted); font-weight: 700;
     font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em;
-    padding: 0.65rem 0.85rem; text-align: left;
+    padding: 0.7rem 1rem; text-align: left;
     border-bottom: 1px solid var(--border);
     position: sticky; top: 0;
   }
   thead th:first-child { border-radius: 10px 0 0 0; }
   thead th:last-child  { border-radius: 0 10px 0 0; }
   td {
-    padding: 0.6rem 0.85rem;
+    padding: 0.65rem 1rem;
     border-bottom: 1px solid var(--border);
     color: var(--text-sec);
     font-family: var(--font-body);
@@ -645,17 +681,17 @@ HTML = r"""<!DOCTYPE html>
     padding: 3px 10px; border-radius: 8px;
     font-size: 0.72rem; font-weight: 700;
   }
-  .pill-green { background: var(--green-bg); color: var(--green); }
-  .pill-red   { background: var(--red-bg);   color: var(--red);   }
-  .pill-blue  { background: var(--accent-bg); color: var(--accent); }
+  .pill-green  { background: var(--green-bg); color: var(--green); }
+  .pill-red    { background: var(--red-bg);   color: var(--red);   }
+  .pill-blue   { background: var(--accent-bg); color: var(--accent); }
   .pill-orange { background: var(--orange-bg); color: var(--orange); }
-  .pill-teal  { background: rgba(13,202,240,0.1); color: #0DCAF0; }
+  .pill-teal   { background: rgba(13,202,240,0.1); color: #0DCAF0; }
   .pii-note {
     font-size: 0.72rem; color: var(--muted); margin-bottom: 0.75rem;
     font-weight: 500; font-family: var(--font-body);
   }
 
-  /* ── Audit ──────────────────────────────────────────────────────────── */
+  /* ── Audit ────────────────────────────────────────────────────────── */
   details summary {
     cursor: pointer; font-size: 0.85rem; font-weight: 700;
     color: var(--text-sec); padding: 0.5rem 0; user-select: none;
@@ -674,27 +710,27 @@ HTML = r"""<!DOCTYPE html>
   details[open] summary::before { transform: rotate(90deg); }
   details[open] summary { margin-bottom: 0.75rem; }
 
-  /* ── Footer ─────────────────────────────────────────────────────────── */
+  /* ── Footer ───────────────────────────────────────────────────────── */
   footer.page-footer {
     text-align: center; color: var(--muted);
-    font-size: 0.72rem; padding: 1.5rem 2rem 2rem;
+    font-size: 0.72rem; padding: 1.5rem 2rem 2.5rem;
     font-family: var(--font-body);
   }
 
-  /* ── Responsive ─────────────────────────────────────────────────────── */
+  /* ── Responsive ───────────────────────────────────────────────────── */
   @media (max-width: 1024px) {
     .kpi-grid { grid-template-columns: repeat(2, 1fr); }
     .chart-row.r-2-1, .chart-row.r-1-1, .chart-row.r-1-1-1 {
       grid-template-columns: 1fr;
     }
-    .attention-grid { grid-template-columns: 1fr; }
+    .insights-grid { grid-template-columns: 1fr; }
   }
   @media (max-width: 768px) {
     .sidebar { transform: translateX(-100%); }
     .sidebar.open { transform: translateX(0); box-shadow: var(--shadow-lg); }
     .main-wrap { margin-left: 0; }
     .hamburger { display: block; }
-    main { padding: 1rem; }
+    main { padding: 1.25rem; }
     .top-header { padding: 0.8rem 1rem; }
     .kpi-grid { grid-template-columns: 1fr 1fr; gap: 0.75rem; }
     .kpi-value { font-size: 1.5rem; }
@@ -709,25 +745,20 @@ HTML = r"""<!DOCTYPE html>
   }
   .sidebar-overlay.show { display: block; }
 
-  /* ── Scrollbar ──────────────────────────────────────────────────────── */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; opacity: 0.5; }
 
-  /* ── Smooth scroll ──────────────────────────────────────────────────── */
   html { scroll-behavior: smooth; }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
-  /* ── Chart dark-mode text ───────────────────────────────────────────── */
   .plotly .main-svg text { fill: var(--text-sec) !important; }
 </style>
 </head>
 <body>
 
-<!-- ── Sidebar overlay (mobile) ──────────────────────────────────────── -->
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-<!-- ── Sidebar ────────────────────────────────────────────────────────── -->
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-brand">
     <div class="logo">CB</div>
@@ -741,6 +772,10 @@ HTML = r"""<!DOCTYPE html>
     <a href="#overview" class="active" data-section="overview">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
       Overview
+    </a>
+    <a href="#insights" data-section="insights">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+      Insights
     </a>
     <a href="#analytics" data-section="analytics">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 5-6"/></svg>
@@ -760,7 +795,6 @@ HTML = r"""<!DOCTYPE html>
   </div>
 </aside>
 
-<!-- ── Main ───────────────────────────────────────────────────────────── -->
 <div class="main-wrap">
   <header class="top-header">
     <div style="display:flex;align-items:center;gap:0.75rem">
@@ -792,10 +826,10 @@ HTML = r"""<!DOCTYPE html>
     </div>
     {% endif %}
 
-    <!-- ── KPI cards ──────────────────────────────────────────────────── -->
+    <!-- KPI cards -->
     <section id="overview">
     <div class="kpi-grid">
-      <div class="kpi">
+      <div class="kpi kpi-accent">
         <div class="kpi-top">
           <div>
             <div class="kpi-label">Total applications</div>
@@ -814,7 +848,7 @@ HTML = r"""<!DOCTYPE html>
         </div>
       </div>
 
-      <div class="kpi">
+      <div class="kpi kpi-green">
         <div class="kpi-top">
           <div>
             <div class="kpi-label">Avg completeness</div>
@@ -833,7 +867,7 @@ HTML = r"""<!DOCTYPE html>
         </div>
       </div>
 
-      <div class="kpi">
+      <div class="kpi kpi-orange">
         <div class="kpi-top">
           <div>
             <div class="kpi-label">Ready for review</div>
@@ -852,7 +886,7 @@ HTML = r"""<!DOCTYPE html>
         </div>
       </div>
 
-      <div class="kpi">
+      <div class="kpi kpi-red">
         <div class="kpi-top">
           <div>
             <div class="kpi-label">Avg turnaround</div>
@@ -871,28 +905,59 @@ HTML = r"""<!DOCTYPE html>
         </div>
       </div>
     </div>
+    </section>
 
-    <!-- ── Attention section ──────────────────────────────────────────── -->
-    <div class="attention-grid">
-      <div class="att-card {{ 'ok' if flagged_count == 0 else ('danger' if blocker_count > 0 else 'warn') }}">
-        <div class="att-title">Flagged applications</div>
-        <div class="att-value">{{ flagged_count }}</div>
-        <div class="att-desc">{{ blocker_count }} with blocker-level flags</div>
+    <!-- Insights & Alerts -->
+    <section id="insights">
+    <div class="section-header">
+      <h2>Insights &amp; Alerts</h2>
+      <span class="section-badge">Auto-generated</span>
+    </div>
+    <div class="insights-grid">
+      <div class="insight-card">
+        <div class="insight-card-header">
+          <div class="ic-icon warn-bg">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <h3>What Needs Attention</h3>
+        </div>
+        <div class="insight-list">
+          {% for item in attention_items %}
+          <div class="insight-item {{ item.type }}">
+            <div class="insight-dot"></div>
+            <div class="insight-content">
+              <div class="insight-title">{{ item.title }}</div>
+              <div class="insight-desc">{{ item.desc }}</div>
+            </div>
+            {% if item.metric %}<div class="insight-metric">{{ item.metric }}</div>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
       </div>
-      <div class="att-card {{ 'ok' if below_threshold == 0 else 'warn' }}">
-        <div class="att-title">Below threshold</div>
-        <div class="att-value">{{ below_threshold }}</div>
-        <div class="att-desc">Completeness &lt; 75%</div>
-      </div>
-      <div class="att-card ok">
-        <div class="att-title">Delivery success</div>
-        <div class="att-value">{{ delivery_rate }}%</div>
-        <div class="att-desc">Notifications delivered</div>
+
+      <div class="insight-card">
+        <div class="insight-card-header">
+          <div class="ic-icon info-bg">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 5-6"/></svg>
+          </div>
+          <h3>Performance Summary</h3>
+        </div>
+        <div class="insight-list">
+          {% for item in quick_insights %}
+          <div class="insight-item {{ item.type }}">
+            <div class="insight-dot"></div>
+            <div class="insight-content">
+              <div class="insight-title">{{ item.title }}</div>
+              <div class="insight-desc">{{ item.desc }}</div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
       </div>
     </div>
     </section>
 
-    <!-- ── Analytics ──────────────────────────────────────────────────── -->
+    <!-- Analytics -->
     <section id="analytics">
     <div class="section-header">
       <h2>Analytics</h2>
@@ -916,14 +981,14 @@ HTML = r"""<!DOCTYPE html>
     </div>
     </section>
 
-    <!-- ── Applications table ─────────────────────────────────────────── -->
+    <!-- Applications table -->
     <section id="applications" style="margin-top:0.5rem">
     <div class="section-header">
       <h2>Recent Applications</h2>
       <span class="section-badge">Last 30</span>
     </div>
     <div class="card" style="padding:0;overflow:hidden">
-      <div style="padding:1rem 1.25rem 0">
+      <div style="padding:1.1rem 1.5rem 0">
         <p class="pii-note">PII fields (name, phone, address) are not shown per data-handling guardrail.</p>
       </div>
       <div class="table-wrap">
@@ -970,8 +1035,8 @@ HTML = r"""<!DOCTYPE html>
     </div>
     </section>
 
-    <!-- ── Audit log ──────────────────────────────────────────────────── -->
-    <section id="audit" style="margin-top:1.5rem">
+    <!-- Audit log -->
+    <section id="audit" style="margin-top:1.75rem">
     <div class="card">
       <details>
         <summary>Audit log (last 50 events)</summary>
@@ -1011,7 +1076,6 @@ HTML = r"""<!DOCTYPE html>
 </div>
 
 <script>
-/* ── Charts ──────────────────────────────────────────────────────────── */
 const cfg = {responsive: true, displayModeBar: false};
 const isDark = () => document.documentElement.dataset.theme === 'dark' ||
   (!document.documentElement.dataset.theme &&
@@ -1043,7 +1107,6 @@ const charts = {
 };
 Object.entries(charts).forEach(([id, spec]) => renderChart(id, spec));
 
-/* ── Theme toggle ────────────────────────────────────────────────────── */
 const themeBtn = document.getElementById('themeBtn');
 const themeIcon = document.getElementById('themeIcon');
 const sunPath = '<circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>';
@@ -1061,7 +1124,6 @@ try {
 } catch(e) {}
 themeBtn.addEventListener('click', () => applyTheme(!isDark()));
 
-/* ── Sidebar toggle (mobile) ─────────────────────────────────────────── */
 const sidebar = document.getElementById('sidebar');
 const overlay = document.getElementById('sidebarOverlay');
 const menuBtn = document.getElementById('menuBtn');
@@ -1074,7 +1136,6 @@ overlay.addEventListener('click', () => {
   overlay.classList.remove('show');
 });
 
-/* ── Active nav tracking ─────────────────────────────────────────────── */
 const navLinks = document.querySelectorAll('.sidebar-nav a[data-section]');
 const sections = {};
 navLinks.forEach(a => {
@@ -1098,7 +1159,6 @@ navLinks.forEach(a => a.addEventListener('click', () => {
   overlay.classList.remove('show');
 }));
 
-/* ── Auto-refresh ────────────────────────────────────────────────────── */
 setTimeout(() => location.reload(), 60000);
 </script>
 </body>
@@ -1129,7 +1189,6 @@ def index():
     ready_rate  = round(ready_count / proc_count * 100, 1) if proc_count else 0
     avg_turn    = round(processed["turnaround_seconds"].mean(), 1) if proc_count else 0
 
-    # Trend calculations (recent 15 days vs previous 15 days)
     now_utc = pd.Timestamp.now(tz="UTC")
     mid = now_utc - pd.Timedelta(days=15)
     recent_apps = apps_df[apps_df["created_at"] >= mid] if not apps_df.empty else apps_df
@@ -1154,7 +1213,6 @@ def index():
     r_turn = recent_proc["turnaround_seconds"].mean() if len(recent_proc) else 0
     p_turn = prev_proc["turnaround_seconds"].mean() if len(prev_proc) else 0
     turn_trend, turn_trend_dir = _trend(r_turn, p_turn)
-    # For turnaround, lower is better — flip direction
     if turn_trend_dir == "up":
         turn_trend_dir = "down"
     elif turn_trend_dir == "down":
@@ -1174,6 +1232,73 @@ def index():
     notified = processed[processed["notification_channel"].notna() & (processed["notification_channel"] != "none")] if proc_count else processed
     delivered = processed[processed.get("notification_status", pd.Series()) == "delivered"] if proc_count and "notification_status" in processed.columns else pd.DataFrame()
     delivery_rate = round(len(delivered) / max(len(notified), 1) * 100, 1) if proc_count else 0
+
+    # ── Insights computation ─────────────────────────────────────────
+    attention_items = []
+    quick_insights = []
+
+    if flagged_count > 0:
+        attention_items.append({
+            "type": "danger" if blocker_count > 0 else "warn",
+            "title": f"{flagged_count} applications flagged",
+            "desc": f"{blocker_count} with blocker-level flags requiring review" if blocker_count else "Review flags for potential document issues",
+            "metric": str(flagged_count),
+        })
+
+    if below_threshold > 0:
+        attention_items.append({
+            "type": "warn",
+            "title": f"{below_threshold} below 75% completeness",
+            "desc": "Documents may be missing or unreadable",
+            "metric": str(below_threshold),
+        })
+
+    if delivery_rate < 100 and proc_count > 0:
+        attention_items.append({
+            "type": "warn" if delivery_rate < 90 else "info",
+            "title": f"Delivery rate at {delivery_rate}%",
+            "desc": "Some officer notifications failed to deliver",
+            "metric": f"{delivery_rate}%",
+        })
+
+    if ready_trend_dir == "down" and ready_trend > 5:
+        attention_items.append({
+            "type": "warn",
+            "title": f"Readiness down {ready_trend}%",
+            "desc": "Fewer applications passing readiness checks vs prior period",
+            "metric": f"-{ready_trend}%",
+        })
+
+    if not attention_items:
+        attention_items.append({
+            "type": "ok",
+            "title": "All clear",
+            "desc": "No issues requiring immediate attention",
+            "metric": "",
+        })
+
+    quick_insights.append({
+        "type": "up" if vol_trend_dir == "up" else ("down" if vol_trend_dir == "down" else "flat"),
+        "title": f"Volume {'up' if vol_trend_dir == 'up' else ('down' if vol_trend_dir == 'down' else 'steady')} {vol_trend}% vs prior period",
+        "desc": f"{total} total applications in the last 30 days",
+    })
+
+    if proc_count > 0:
+        quick_insights.append({
+            "type": "up" if avg_comp >= 75 else "down",
+            "title": f"Avg completeness at {avg_comp}%",
+            "desc": f"{'Above' if avg_comp >= 75 else 'Below'} the 75% readiness threshold",
+        })
+        quick_insights.append({
+            "type": "up" if ready_rate >= 50 else "down",
+            "title": f"{ready_rate}% ready for underwriting",
+            "desc": f"{ready_count} of {proc_count} processed applications qualify",
+        })
+        quick_insights.append({
+            "type": "up" if avg_turn < 30 else ("flat" if avg_turn < 120 else "down"),
+            "title": f"Avg processing time: {avg_turn}s",
+            "desc": "Claude extraction + validation pipeline speed",
+        })
 
     # Charts
     volume_json       = chart_volume(apps_df) if not apps_df.empty else "{}"
@@ -1239,6 +1364,8 @@ def index():
         blocker_count=blocker_count,
         below_threshold=below_threshold,
         delivery_rate=delivery_rate,
+        attention_items=attention_items,
+        quick_insights=quick_insights,
         table_rows=table_rows,
         audit_rows=audit_rows,
         volume_json=_extract_chart(volume_json) if proc_count or not apps_df.empty else "{}",
