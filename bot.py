@@ -369,8 +369,24 @@ async def finalize(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     })
     elapsed = time.monotonic() - start_time
 
-    # ── Applicant-facing summary ──────────────────────────────────────────
-    lines = [
+    # ── Applicant-facing confirmation (simple, no technical details) ─────
+    applicant_msg = (
+        f"✅ Thank you, {(declared_name or '').split()[0] or 'Applicant'}! "
+        "All your documents have been uploaded successfully.\n\n"
+        f"Your reference number is: *{reference}*\n\n"
+        "A credit officer will review your documents and get back to you "
+        "here on Telegram"
+        + (", via SMS" if phone_number else "")
+        + (", or by email" if email else "")
+        + ". This typically takes 1–3 business days.\n\n"
+        "Please keep your reference number safe — you may need it for "
+        "follow-up inquiries."
+    )
+
+    await update.message.reply_text(applicant_msg, parse_mode="Markdown")
+
+    # ── Officer-facing detailed report ───────────────────────────────────
+    officer_lines = [
         "📋 Document Readiness Summary",
         f"Reference: {reference}",
         "",
@@ -386,36 +402,15 @@ async def finalize(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     ]
 
     if result.flags:
-        lines.append("Flags:")
+        officer_lines.append("Flags:")
         for flag in result.flags:
             icon = "🛑" if flag.severity == "blocker" else "⚠️"
-            lines.append(f"{icon} {flag.message}")
+            officer_lines.append(f"{icon} {flag.message}")
     else:
-        lines.append("No issues found.")
+        officer_lines.append("No issues found.")
 
-    lines += [
-        "",
-        "─────────────────────────────",
-        "✅ Your application has been submitted.",
-        f"Your reference number is: {reference}",
-        "",
-        "A credit officer will review your documents and send you an "
-        "update here on Telegram"
-        + (", via SMS" if phone_number else "")
-        + (", or by email" if email else "")
-        + " once their review is complete. "
-        "This typically takes 1–3 business days.",
-        "",
-        "Nothing in this report is an approval or rejection — "
-        "all decisions are made by a human officer.",
-    ]
-
-    summary_text = "\n".join(lines)
+    summary_text = "\n".join(officer_lines)
     comparison_text = _format_comparison_table(result.field_comparison)
-
-    await update.message.reply_text(summary_text)
-    if comparison_text:
-        await update.message.reply_text(comparison_text)
 
     # ── Officer-facing forward ────────────────────────────────────────────
     officer_chat_id = (
