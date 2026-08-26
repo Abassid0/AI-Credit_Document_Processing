@@ -749,10 +749,77 @@ async def officer_notify(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 # ---------------------------------------------------------------------------
+# Lead capture on abandon
+# ---------------------------------------------------------------------------
+
+# Maps conversation state numbers to human-readable stage names
+_STAGE_NAMES = {
+    SELECTING_INSTITUTION: "institution_selection",
+    SELECTING_PRODUCT:     "product_selection",
+    COLLECTING_NAME:       "name",
+    COLLECTING_ADDRESS:    "address",
+    COLLECTING_GENDER:     "gender",
+    COLLECTING_PHONE:      "phone",
+    COLLECTING_EMAIL:      "email",
+    COLLECTING_DOCS:       "documents",
+}
+
+
+def _capture_lead(context: ContextTypes.DEFAULT_TYPE, user_id: int, source: str) -> None:
+    """Save whatever personal info was collected as a lead for follow-up."""
+    data = context.user_data
+    name = data.get("declared_name")
+    phone = data.get("phone_number")
+    email = data.get("email")
+
+    if not name and not phone and not email:
+        return
+
+    doc_index = data.get("doc_index", 0)
+    state_hint = "documents" if doc_index > 0 else "personal_details"
+    stage = state_hint
+
+    if config.SUPABASE_URL and config.SUPABASE_KEY:
+        try:
+            from storage import save_lead, append_audit_event
+            lead_id = save_lead(
+                telegram_user_id=user_id,
+                declared_name=name,
+                phone_number=phone,
+                email=email,
+                declared_address=data.get("declared_address"),
+                declared_gender=data.get("declared_gender"),
+                product_code=data.get("product_code"),
+                product_name=data.get("product_name"),
+                institution_type=data.get("institution_type"),
+                stage_reached=stage,
+                source=source,
+            )
+            if lead_id:
+                append_audit_event(
+                    application_id=None,
+                    event_type="lead_captured",
+                    actor="bot",
+                    payload={
+                        "lead_id": lead_id,
+                        "source": source,
+                        "stage": stage,
+                        "product_code": data.get("product_code"),
+                    },
+                )
+                logger.info("Lead captured: %s (source=%s, stage=%s)", lead_id, source, stage)
+        except Exception:
+            logger.exception("Failed to capture lead for user %s", user_id)
+
+
+# ---------------------------------------------------------------------------
 # Session & utility handlers
 # ---------------------------------------------------------------------------
 
 async def session_timeout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user_id = update.effective_user.id if update and update.effective_user else None
+    if user_id:
+        _capture_lead(context, user_id, source="timeout")
     if update and update.message:
         await update.message.reply_text(
             "Your session has expired due to inactivity. "
@@ -762,6 +829,8 @@ async def session_timeout(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user_id = update.effective_user.id
+    _capture_lead(context, user_id, source="cancelled")
     await update.message.reply_text(
         "Application cancelled. Send /start to begin again."
     )

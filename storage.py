@@ -186,6 +186,96 @@ def list_audit_events(limit: int = 200) -> list[dict]:
         return []
 
 
+def save_lead(
+    telegram_user_id: int,
+    declared_name: Optional[str] = None,
+    phone_number: Optional[str] = None,
+    email: Optional[str] = None,
+    declared_address: Optional[str] = None,
+    declared_gender: Optional[str] = None,
+    product_code: Optional[str] = None,
+    product_name: Optional[str] = None,
+    institution_type: Optional[str] = None,
+    stage_reached: Optional[str] = None,
+    source: str = "abandoned",
+) -> Optional[str]:
+    """
+    Saves a lead from an abandoned or timed-out application session.
+    Only saves if the user provided at least a name or phone number.
+    Returns the lead record id, or None if nothing worth saving.
+    """
+    if not declared_name and not phone_number and not email:
+        return None
+    if not (config.SUPABASE_URL and config.SUPABASE_KEY):
+        logger.warning("save_lead: Supabase not configured")
+        return None
+    try:
+        client = get_client()
+        result = client.table("leads").insert({
+            "telegram_user_id": telegram_user_id,
+            "declared_name":    encrypt_field(declared_name),
+            "phone_number":     encrypt_field(phone_number),
+            "email":            encrypt_field(email),
+            "declared_address": encrypt_field(declared_address),
+            "declared_gender":  declared_gender,
+            "product_code":     product_code,
+            "product_name":     product_name,
+            "institution_type": institution_type,
+            "stage_reached":    stage_reached,
+            "source":           source,
+            "status":           "new",
+            "created_at":       datetime.now(timezone.utc).isoformat(),
+        }).execute()
+        return result.data[0]["id"]
+    except Exception:
+        logger.exception("save_lead: insert failed")
+        return None
+
+
+def list_leads(limit: int = 100) -> list[dict]:
+    """
+    Returns leads for the dashboard. PII is decrypted for officer view.
+    """
+    if not (config.SUPABASE_URL and config.SUPABASE_KEY):
+        return []
+    try:
+        client = get_client()
+        result = (
+            client.table("leads")
+            .select("*")
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        rows = result.data or []
+        for row in rows:
+            row["declared_name"] = decrypt_field(row.get("declared_name"))
+            row["phone_number"]  = decrypt_field(row.get("phone_number"))
+            row["email"]         = decrypt_field(row.get("email"))
+            row["declared_address"] = decrypt_field(row.get("declared_address"))
+        return rows
+    except Exception:
+        logger.exception("list_leads: query failed")
+        return []
+
+
+def update_lead_status(lead_id: str, status: str, notes: Optional[str] = None) -> None:
+    """Mark a lead as contacted/converted/closed."""
+    if not (config.SUPABASE_URL and config.SUPABASE_KEY):
+        return
+    try:
+        client = get_client()
+        update = {
+            "status": status,
+            "followed_up_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if notes:
+            update["notes"] = notes
+        client.table("leads").update(update).eq("id", lead_id).execute()
+    except Exception:
+        logger.exception("update_lead_status: update failed for %s", lead_id)
+
+
 def save_notification_delivery(
     application_id: str,
     channel: str,

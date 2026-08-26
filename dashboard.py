@@ -876,6 +876,10 @@ HTML = r"""<!DOCTYPE html>
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
       Applications
     </a>
+    <a href="#leads" data-section="leads">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+      Leads
+    </a>
     <a href="#audit" data-section="audit">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       Audit Log
@@ -1139,6 +1143,73 @@ HTML = r"""<!DOCTYPE html>
         </tbody>
       </table>
       </div>
+    </div>
+    </section>
+
+    <!-- Leads -->
+    <section id="leads" style="margin-top:1.75rem">
+    <div class="section-header">
+      <h2>Leads</h2>
+      <span class="section-badge">{{ lead_rows|length }} abandoned</span>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:1.1rem 1.5rem 0">
+        <p class="pii-note">Applicants who started but did not complete their application. Follow up to convert.</p>
+      </div>
+      {% if lead_rows %}
+      <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th><th>Phone</th><th>Email</th><th>Product</th>
+            <th>Stage reached</th><th>Source</th><th>Status</th><th>Date</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for lead in lead_rows %}
+        <tr>
+          <td>{{ lead.name if lead.name else '&mdash;' }}</td>
+          <td class="mono">{{ lead.phone if lead.phone else '&mdash;' }}</td>
+          <td>{{ lead.email if lead.email else '&mdash;' }}</td>
+          <td>
+            {% if lead.product %}
+              <span class="pill pill-blue">{{ lead.product }}</span>
+            {% else %}&mdash;{% endif %}
+          </td>
+          <td><span class="pill pill-orange">{{ lead.stage }}</span></td>
+          <td>
+            {% if lead.source == 'cancelled' %}
+              <span class="pill pill-red">Cancelled</span>
+            {% elif lead.source == 'timeout' %}
+              <span class="pill pill-orange">Timeout</span>
+            {% else %}
+              <span class="pill pill-blue">{{ lead.source }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if lead.status == 'new' %}
+              <span class="pill pill-orange">New</span>
+            {% elif lead.status == 'contacted' %}
+              <span class="pill pill-blue">Contacted</span>
+            {% elif lead.status == 'converted' %}
+              <span class="pill pill-green">Converted</span>
+            {% elif lead.status == 'closed' %}
+              <span class="pill pill-red">Closed</span>
+            {% else %}
+              <span class="pill pill-blue">{{ lead.status }}</span>
+            {% endif %}
+          </td>
+          <td>{{ lead.date }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <div style="padding:1rem 1.5rem;color:var(--muted);font-size:.82rem">
+        No leads captured yet. Leads appear when applicants cancel or time out after providing personal details.
+      </div>
+      {% endif %}
     </div>
     </section>
 
@@ -1423,6 +1494,15 @@ def index():
             "desc": f"Most popular: {top_product} ({top_product_count} applications)" if top_product else "Product data available",
         })
 
+    # Lead insight
+    new_leads = sum(1 for ld in lead_rows if ld["status"] == "new")
+    if new_leads > 0:
+        quick_insights.append({
+            "type": "info",
+            "title": f"{new_leads} new lead{'s' if new_leads != 1 else ''} to follow up",
+            "desc": f"{len(lead_rows)} total leads captured from abandoned sessions",
+        })
+
     # Charts
     volume_json       = chart_volume(apps_df) if not apps_df.empty else "{}"
     ready_json        = chart_ready(processed) if proc_count else "{}"
@@ -1454,6 +1534,30 @@ def index():
             "channel":     r.get("notification_channel", "") if pd.notna(r.get("notification_channel")) else "",
             "turnaround":  f"{r['turnaround_seconds']:.1f}s",
         })
+
+    # Lead rows
+    lead_rows = []
+    try:
+        from storage import list_leads as _list_leads
+        raw_leads = _list_leads(limit=100) if not is_demo else []
+        for ld in raw_leads:
+            ts_raw = ld.get("created_at", "")
+            try:
+                ts = pd.to_datetime(ts_raw, utc=True).strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                ts = str(ts_raw)[:16]
+            lead_rows.append({
+                "name":    ld.get("declared_name") or "",
+                "phone":   ld.get("phone_number") or "",
+                "email":   ld.get("email") or "",
+                "product": ld.get("product_name") or "",
+                "stage":   (ld.get("stage_reached") or "unknown").replace("_", " ").title(),
+                "source":  ld.get("source") or "abandoned",
+                "status":  ld.get("status") or "new",
+                "date":    ts,
+            })
+    except Exception:
+        pass
 
     # Audit rows
     audit_rows = []
@@ -1495,6 +1599,7 @@ def index():
         attention_items=attention_items,
         quick_insights=quick_insights,
         table_rows=table_rows,
+        lead_rows=lead_rows,
         audit_rows=audit_rows,
         volume_json=_extract_chart(volume_json) if proc_count or not apps_df.empty else "{}",
         ready_json=_extract_chart(ready_json) if proc_count else "{}",
