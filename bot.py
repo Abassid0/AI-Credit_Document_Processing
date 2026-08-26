@@ -678,7 +678,7 @@ async def officer_notify(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if is_reference and config.SUPABASE_URL and config.SUPABASE_KEY:
         try:
             from storage import get_application_by_reference
-            record = get_application_by_reference(target.upper())
+            record = get_application_by_reference(target)
             if record is None:
                 await update.message.reply_text(
                     f"❌ No application found for reference {target}."
