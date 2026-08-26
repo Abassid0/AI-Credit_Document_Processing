@@ -392,6 +392,15 @@ async def receive_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     await update.message.reply_text(f"Got it -- reading your {doc_label}...")
 
+    # Store sanitized image for officer review (fire-and-forget)
+    try:
+        from document_storage import upload_document
+        ref = context.user_data.get("reference", "")
+        if ref:
+            await asyncio.to_thread(upload_document, ref, doc_type, image_bytes)
+    except Exception:
+        logger.debug("Document storage skipped (non-critical)")
+
     extracted: ExtractedDocument = await asyncio.to_thread(
         extract_document, image_bytes, f"{doc_type}.jpg", doc_type
     )

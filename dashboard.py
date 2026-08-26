@@ -1102,7 +1102,7 @@ HTML = r"""<!DOCTYPE html>
         <thead>
           <tr>
             <th>Reference</th><th>Product</th><th>Submitted</th><th>Complete</th>
-            <th>Ready</th><th>Officer</th><th>Notified via</th><th>Turnaround</th>
+            <th>Ready</th><th>Officer</th><th>Notified via</th><th>Turnaround</th><th>Docs</th>
           </tr>
         </thead>
         <tbody>
@@ -1138,6 +1138,11 @@ HTML = r"""<!DOCTYPE html>
             {% else %}&mdash;{% endif %}
           </td>
           <td class="mono">{{ row.turnaround }}</td>
+          <td>
+            {% if row.ref %}
+              <a href="/documents/{{ row.ref }}" target="_blank" style="color:var(--accent);text-decoration:none;font-weight:600;font-size:.8rem">View</a>
+            {% else %}&mdash;{% endif %}
+          </td>
         </tr>
         {% endfor %}
         </tbody>
@@ -1611,6 +1616,88 @@ def index():
         product_readiness_json=_extract_chart(product_readiness_json) if proc_count else "{}",
         institution_json=_extract_chart(institution_json) if proc_count else "{}",
     )
+    return Response(html, mimetype="text/html")
+
+
+DOCS_HTML = """
+<title>Documents — {{ reference }}</title>
+<style>
+  :root {
+    --bg: #f4f7fe; --card-bg: #ffffff; --text: #2B3674;
+    --muted: #A3AED0; --accent: #4318FF; --border: #e9ecf4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b1437; --card-bg: #111c44; --text: #e2e8f0;
+      --muted: #718096; --accent: #7B61FF; --border: #1e2d5e;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+         background: var(--bg); color: var(--text); padding: 2rem; }
+  .header { margin-bottom: 2rem; }
+  .header h1 { font-size: 1.4rem; font-weight: 700; }
+  .header p { color: var(--muted); font-size: .85rem; margin-top: .3rem; }
+  .back { color: var(--accent); text-decoration: none; font-size: .85rem;
+          font-weight: 600; display: inline-block; margin-bottom: 1rem; }
+  .back:hover { text-decoration: underline; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+          gap: 1.25rem; }
+  .doc-card { background: var(--card-bg); border-radius: 14px;
+              border: 1px solid var(--border); overflow: hidden; }
+  .doc-card .label { padding: .75rem 1rem; font-weight: 600; font-size: .9rem;
+                     border-bottom: 1px solid var(--border); }
+  .doc-card img { width: 100%; height: auto; display: block; cursor: pointer; }
+  .doc-card .meta { padding: .5rem 1rem; color: var(--muted); font-size: .75rem; }
+  .empty { background: var(--card-bg); border-radius: 14px; padding: 2rem;
+           text-align: center; color: var(--muted); border: 1px solid var(--border); }
+</style>
+
+<a href="/" class="back">&larr; Back to dashboard</a>
+<div class="header">
+  <h1>Uploaded Documents</h1>
+  <p>Reference: {{ reference }} &middot; {{ docs|length }} document{{ 's' if docs|length != 1 else '' }} on file</p>
+</div>
+
+{% if docs %}
+<div class="grid">
+  {% for doc in docs %}
+  <div class="doc-card">
+    <div class="label">{{ doc.label }}</div>
+    <a href="{{ doc.url }}" target="_blank">
+      <img src="{{ doc.url }}" alt="{{ doc.label }}" loading="lazy">
+    </a>
+    <div class="meta">Click image to open full size &middot; Link expires in 1 hour</div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty">
+  <p>No documents stored for this application.</p>
+  <p style="margin-top:.5rem;font-size:.8rem">Documents are stored for applications submitted after the storage feature was enabled.</p>
+</div>
+{% endif %}
+"""
+
+
+@app.route("/documents/<reference>")
+def view_documents(reference):
+    """Officer-facing page showing uploaded documents for an application."""
+    import re
+    if not re.match(r"^CRB-\d{8}-[a-f0-9]{4}$", reference):
+        return Response("Invalid reference format", status=400)
+
+    docs = []
+    try:
+        from document_storage import get_document_urls
+        docs = get_document_urls(reference)
+    except Exception:
+        logger.exception("Failed to load documents for %s", reference)
+
+    from jinja2 import Environment
+    env = Environment(autoescape=True)
+    template = env.from_string(DOCS_HTML)
+    html = template.render(reference=reference, docs=docs)
     return Response(html, mimetype="text/html")
 
 
