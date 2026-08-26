@@ -1494,15 +1494,6 @@ def index():
             "desc": f"Most popular: {top_product} ({top_product_count} applications)" if top_product else "Product data available",
         })
 
-    # Lead insight
-    new_leads = sum(1 for ld in lead_rows if ld["status"] == "new")
-    if new_leads > 0:
-        quick_insights.append({
-            "type": "info",
-            "title": f"{new_leads} new lead{'s' if new_leads != 1 else ''} to follow up",
-            "desc": f"{len(lead_rows)} total leads captured from abandoned sessions",
-        })
-
     # Charts
     volume_json       = chart_volume(apps_df) if not apps_df.empty else "{}"
     ready_json        = chart_ready(processed) if proc_count else "{}"
@@ -1558,6 +1549,14 @@ def index():
             })
     except Exception:
         pass
+
+    new_leads = sum(1 for ld in lead_rows if ld["status"] == "new")
+    if new_leads > 0:
+        quick_insights.append({
+            "type": "info",
+            "title": f"{new_leads} new lead{'s' if new_leads != 1 else ''} to follow up",
+            "desc": f"{len(lead_rows)} total leads captured from abandoned sessions",
+        })
 
     # Audit rows
     audit_rows = []
