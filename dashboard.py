@@ -777,6 +777,16 @@ HTML = r"""<!DOCTYPE html>
   .pill-blue   { background: var(--accent-bg); color: var(--accent); }
   .pill-orange { background: var(--orange-bg); color: var(--orange); }
   .pill-teal   { background: rgba(13,202,240,0.1); color: #0DCAF0; }
+  .btn-action {
+    border: none; border-radius: 6px; padding: 4px 10px; font-size: .72rem;
+    font-weight: 600; cursor: pointer; font-family: var(--font-body);
+    transition: opacity .15s;
+  }
+  .btn-action:hover { opacity: .8; }
+  .btn-action:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-blue  { background: var(--accent-bg); color: var(--accent); }
+  .btn-green { background: var(--green-bg);  color: var(--green); }
+  .btn-red   { background: var(--red-bg);    color: var(--red); }
   .pii-note {
     font-size: 0.72rem; color: var(--muted); margin-bottom: 0.75rem;
     font-weight: 500; font-family: var(--font-body);
@@ -1167,12 +1177,12 @@ HTML = r"""<!DOCTYPE html>
         <thead>
           <tr>
             <th>Name</th><th>Phone</th><th>Email</th><th>Product</th>
-            <th>Stage reached</th><th>Source</th><th>Status</th><th>Date</th>
+            <th>Stage reached</th><th>Source</th><th>Status</th><th>Date</th><th>Action</th>
           </tr>
         </thead>
         <tbody>
         {% for lead in lead_rows %}
-        <tr>
+        <tr id="lead-row-{{ lead.id }}">
           <td>{{ lead.name if lead.name else '&mdash;' }}</td>
           <td class="mono">{{ lead.phone if lead.phone else '&mdash;' }}</td>
           <td>{{ lead.email if lead.email else '&mdash;' }}</td>
@@ -1191,7 +1201,7 @@ HTML = r"""<!DOCTYPE html>
               <span class="pill pill-blue">{{ lead.source }}</span>
             {% endif %}
           </td>
-          <td>
+          <td id="lead-status-{{ lead.id }}">
             {% if lead.status == 'new' %}
               <span class="pill pill-orange">New</span>
             {% elif lead.status == 'contacted' %}
@@ -1205,6 +1215,19 @@ HTML = r"""<!DOCTYPE html>
             {% endif %}
           </td>
           <td>{{ lead.date }}</td>
+          <td id="lead-actions-{{ lead.id }}">
+            {% if lead.status == 'new' %}
+              <button class="btn-action btn-blue" onclick="updateLead('{{ lead.id }}','contacted')">Contacted</button>
+              <button class="btn-action btn-red" onclick="updateLead('{{ lead.id }}','closed')">Close</button>
+            {% elif lead.status == 'contacted' %}
+              <button class="btn-action btn-green" onclick="updateLead('{{ lead.id }}','converted')">Converted</button>
+              <button class="btn-action btn-red" onclick="updateLead('{{ lead.id }}','closed')">Close</button>
+            {% elif lead.status == 'converted' %}
+              <span style="color:var(--muted);font-size:.78rem">Done</span>
+            {% elif lead.status == 'closed' %}
+              <span style="color:var(--muted);font-size:.78rem">Closed</span>
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
         </tbody>
@@ -1346,6 +1369,38 @@ navLinks.forEach(a => a.addEventListener('click', () => {
 }));
 
 setTimeout(() => location.reload(), 60000);
+
+function updateLead(leadId, newStatus) {
+  var btns = document.querySelectorAll('#lead-actions-' + leadId + ' button');
+  btns.forEach(function(b) { b.disabled = true; b.textContent = '...'; });
+  fetch('/api/leads/' + leadId + '/status', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({status: newStatus})
+  }).then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        var statusMap = {
+          contacted: '<span class="pill pill-blue">Contacted</span>',
+          converted: '<span class="pill pill-green">Converted</span>',
+          closed: '<span class="pill pill-red">Closed</span>'
+        };
+        var actionsMap = {
+          contacted: '<button class="btn-action btn-green" onclick="updateLead(\'' + leadId + '\',\'converted\')">Converted</button> <button class="btn-action btn-red" onclick="updateLead(\'' + leadId + '\',\'closed\')">Close</button>',
+          converted: '<span style="color:var(--muted);font-size:.78rem">Done</span>',
+          closed: '<span style="color:var(--muted);font-size:.78rem">Closed</span>'
+        };
+        document.getElementById('lead-status-' + leadId).innerHTML = statusMap[newStatus] || newStatus;
+        document.getElementById('lead-actions-' + leadId).innerHTML = actionsMap[newStatus] || '';
+      } else {
+        alert('Failed to update: ' + (data.error || 'unknown error'));
+        btns.forEach(function(b) { b.disabled = false; });
+      }
+    }).catch(function() {
+      alert('Network error — try again');
+      btns.forEach(function(b) { b.disabled = false; });
+    });
+}
 </script>
 </body>
 </html>
@@ -1543,6 +1598,7 @@ def index():
             except Exception:
                 ts = str(ts_raw)[:16]
             lead_rows.append({
+                "id":      ld.get("id") or "",
                 "name":    ld.get("declared_name") or "",
                 "phone":   ld.get("phone_number") or "",
                 "email":   ld.get("email") or "",
@@ -1699,6 +1755,30 @@ def view_documents(reference):
     template = env.from_string(DOCS_HTML)
     html = template.render(reference=reference, docs=docs)
     return Response(html, mimetype="text/html")
+
+
+@app.route("/api/leads/<lead_id>/status", methods=["POST"])
+def api_update_lead_status(lead_id):
+    """API endpoint for officers to update lead status from the dashboard."""
+    import re
+    if not re.match(r"^[a-f0-9\-]{36}$", lead_id):
+        return Response(json.dumps({"ok": False, "error": "invalid id"}),
+                        status=400, mimetype="application/json")
+    try:
+        from flask import request as flask_request
+        data = flask_request.get_json(force=True)
+        new_status = data.get("status", "")
+        if new_status not in ("contacted", "converted", "closed"):
+            return Response(json.dumps({"ok": False, "error": "invalid status"}),
+                            status=400, mimetype="application/json")
+        from storage import update_lead_status
+        update_lead_status(lead_id, new_status)
+        return Response(json.dumps({"ok": True, "status": new_status}),
+                        mimetype="application/json")
+    except Exception:
+        logger.exception("Failed to update lead %s", lead_id)
+        return Response(json.dumps({"ok": False, "error": "server error"}),
+                        status=500, mimetype="application/json")
 
 
 # ---------------------------------------------------------------------------
