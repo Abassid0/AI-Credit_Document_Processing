@@ -3,7 +3,7 @@ bot.py — Telegram bot for the credit application document processing
 pipeline (SOP-009).
 
 Applicant conversation flow:
-  greet → name → address → gender → phone → 4 documents → summary
+  greet → product selection → name → address → gender → phone → documents → summary
 
 Officer commands (outside conversation, usable any time):
   /notify <reference> <message>  — send a status update to an applicant
@@ -41,6 +41,15 @@ from notifications import (
     send_via_sms,
 )
 from validation import validate_application, redact, ExtractedDocument, FieldConfidence
+from product_adapter import (
+    load_product,
+    active_product_config,
+    get_available_products_menu,
+    get_products_by_institution,
+    format_product_summary,
+    resolve_product,
+)
+from credit_products import PRODUCT_CATALOG, InstitutionType
 
 SENSITIVE_COMPARISON_FIELDS = {"bvn", "nin", "account_number", "id_number"}
 
@@ -49,12 +58,14 @@ security.install_pii_filter()
 logger = logging.getLogger(__name__)
 
 # Conversation states
-COLLECTING_NAME    = 0
-COLLECTING_ADDRESS = 1
-COLLECTING_GENDER  = 2
-COLLECTING_PHONE   = 3
-COLLECTING_EMAIL   = 4
-COLLECTING_DOCS    = 5
+SELECTING_INSTITUTION = 0
+SELECTING_PRODUCT     = 1
+COLLECTING_NAME       = 2
+COLLECTING_ADDRESS    = 3
+COLLECTING_GENDER     = 4
+COLLECTING_PHONE      = 5
+COLLECTING_EMAIL      = 6
+COLLECTING_DOCS       = 7
 
 VALID_GENDERS = {"male", "female", "other", "prefer not to say"}
 
@@ -89,9 +100,72 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
         "Welcome to the Credit Application Document Assistant.\n\n"
         "I'll help prepare your file for review by a credit officer. "
-        "I do NOT decide your loan — a human officer reviews everything "
+        "I do NOT decide your loan -- a human officer reviews everything "
         "before any decision is made.\n\n"
-        "Let's start with a few personal details.\n\n"
+        "First, what type of institution are you applying to?\n\n"
+        "*1.* Microfinance Bank (MFB)\n"
+        "*2.* Fintech\n"
+        "*3.* Commercial / Investment Bank\n\n"
+        "Reply with *1*, *2*, or *3*:",
+        parse_mode="Markdown",
+    )
+    return SELECTING_INSTITUTION
+
+
+async def receive_institution(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    choice = update.message.text.strip()
+    inst_map = {
+        "1": InstitutionType.MFB,
+        "2": InstitutionType.FINTECH,
+        "3": InstitutionType.BANK,
+    }
+    inst_type = inst_map.get(choice)
+    if inst_type is None:
+        await update.message.reply_text(
+            "Please reply with *1*, *2*, or *3*.",
+            parse_mode="Markdown",
+        )
+        return SELECTING_INSTITUTION
+
+    context.user_data["institution_type"] = inst_type.value
+    products = get_products_by_institution(inst_type.value)
+
+    lines = ["Great. Please select a loan product:\n"]
+    for i, p in enumerate(products, 1):
+        lines.append(f"*{i}.* {p['name']}")
+        lines.append(f"   _{p['description']}_\n")
+
+    lines.append(f"Reply with a number (1-{len(products)}):")
+    context.user_data["_product_choices"] = products
+
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    return SELECTING_PRODUCT
+
+
+async def receive_product(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    choices = context.user_data.get("_product_choices", [])
+    raw = update.message.text.strip()
+
+    try:
+        idx = int(raw) - 1
+        if idx < 0 or idx >= len(choices):
+            raise ValueError
+    except ValueError:
+        await update.message.reply_text(
+            f"Please reply with a number between 1 and {len(choices)}."
+        )
+        return SELECTING_PRODUCT
+
+    product_code = choices[idx]["code"]
+    product_cfg = load_product(product_code)
+    context.user_data["product_code"] = product_code
+    context.user_data["product_name"] = product_cfg.product_name
+    context.user_data.pop("_product_choices", None)
+
+    summary = format_product_summary(product_code)
+    await update.message.reply_text(
+        f"You selected:\n\n{summary}\n\n"
+        "Let's start with your personal details.\n\n"
         "Please enter your *full name* as it appears on your ID:",
         parse_mode="Markdown",
     )
@@ -189,17 +263,34 @@ async def receive_email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         )
         return COLLECTING_EMAIL
 
-    await update.message.reply_text(
-        "Perfect — your details are saved.\n\n"
-        "Now let's collect your documents. We'll go one at a time.\n\n"
-        "📸 *First: your passport photograph*\n\n"
-        "Tap the 📎 attachment icon then choose *Camera* to take a selfie now, "
-        "or *Gallery* to upload a recent passport-style photo.\n\n"
-        "Make sure your face is clearly visible against a plain background.\n\n"
-        "_For all other documents you can send a photo OR a PDF. "
-        "Send /cancel anytime to stop._",
-        parse_mode="Markdown",
-    )
+    cfg = active_product_config()
+    docs_order = cfg.documents_order
+    first_type, first_label = docs_order[0]
+
+    doc_count = len(docs_order)
+    if first_type in ("passport_photo", "selfie"):
+        first_prompt = (
+            f"Perfect -- your details are saved.\n\n"
+            f"Now let's collect your documents ({doc_count} required). "
+            f"We'll go one at a time.\n\n"
+            f"*First: your {first_label}*\n\n"
+            f"Tap the attachment icon then choose *Camera* to take a selfie now, "
+            f"or *Gallery* to upload a recent photo.\n\n"
+            f"Make sure your face is clearly visible against a plain background.\n\n"
+            f"_For all other documents you can send a photo OR a PDF. "
+            f"Send /cancel anytime to stop._"
+        )
+    else:
+        first_prompt = (
+            f"Perfect -- your details are saved.\n\n"
+            f"Now let's collect your documents ({doc_count} required). "
+            f"We'll go one at a time.\n\n"
+            f"*First: your {first_label}*\n\n"
+            f"Send it as a photo or PDF -- tap the attachment icon to attach.\n\n"
+            f"_Send /cancel anytime to stop._"
+        )
+
+    await update.message.reply_text(first_prompt, parse_mode="Markdown")
     return COLLECTING_DOCS
 
 
@@ -232,11 +323,13 @@ def convert_pdf_to_image(pdf_bytes: bytes, dpi: int = 200) -> bytes:
 
 
 async def receive_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    cfg = active_product_config()
+    docs_order = cfg.documents_order
     doc_index = context.user_data.get("doc_index", 0)
-    if doc_index >= len(config.REQUIRED_DOCUMENTS_ORDER):
+    if doc_index >= len(docs_order):
         return await finalize(update, context)
 
-    doc_type, doc_label = config.REQUIRED_DOCUMENTS_ORDER[doc_index]
+    doc_type, doc_label = docs_order[doc_index]
 
     photo = update.message.photo[-1] if update.message.photo else None
     pdf_doc = (
@@ -246,17 +339,17 @@ async def receive_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
 
     if photo is None and pdf_doc is None:
-        if doc_type == "passport_photo":
+        if doc_type in ("passport_photo", "selfie"):
             await update.message.reply_text(
-                "Please send your passport photograph.\n\n"
-                "Tap the 📎 attachment icon → *Camera* to take a selfie now, "
+                f"Please send your {doc_label}.\n\n"
+                "Tap the attachment icon, then choose *Camera* to take a selfie now, "
                 "or *Gallery* to upload a recent photo.",
                 parse_mode="Markdown",
             )
         else:
             await update.message.reply_text(
                 f"Please send your {doc_label} as a *photo* or *PDF*.\n"
-                "Tap 📎 to attach.",
+                "Tap the attachment icon to attach.",
                 parse_mode="Markdown",
             )
         return COLLECTING_DOCS
@@ -283,7 +376,7 @@ async def receive_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             raw_bytes = await asyncio.to_thread(convert_pdf_to_image, raw_bytes)
         except ValueError as exc:
             await update.message.reply_text(
-                f"⚠️ Could not read that PDF: {exc}\n"
+                f"Could not read that PDF: {exc}\n"
                 "Please send a clearer copy or photograph the document instead."
             )
             return COLLECTING_DOCS
@@ -292,12 +385,12 @@ async def receive_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         image_bytes = security.sanitize_image(raw_bytes)
     except ValueError as exc:
         await update.message.reply_text(
-            f"⚠️ Could not process that {source_label}: {exc}\n"
+            f"Could not process that {source_label}: {exc}\n"
             "Please retake the photo or send a different copy."
         )
         return COLLECTING_DOCS
 
-    await update.message.reply_text(f"Got it — reading your {doc_label}...")
+    await update.message.reply_text(f"Got it -- reading your {doc_label}...")
 
     extracted: ExtractedDocument = await asyncio.to_thread(
         extract_document, image_bytes, f"{doc_type}.jpg", doc_type
@@ -306,18 +399,18 @@ async def receive_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     context.user_data["doc_index"] = doc_index + 1
 
     next_index = doc_index + 1
-    if next_index < len(config.REQUIRED_DOCUMENTS_ORDER):
-        next_type, next_label = config.REQUIRED_DOCUMENTS_ORDER[next_index]
-        if next_type == "passport_photo":
+    if next_index < len(docs_order):
+        next_type, next_label = docs_order[next_index]
+        if next_type in ("passport_photo", "selfie"):
             await update.message.reply_text(
                 f"Next: your *{next_label}*.\n"
-                "Tap 📎 → *Camera* to take a selfie now, or *Gallery* to upload.",
+                "Tap the attachment icon, then *Camera* to take a selfie, or *Gallery* to upload.",
                 parse_mode="Markdown",
             )
         else:
             await update.message.reply_text(
                 f"Next: your *{next_label}*.\n"
-                "Send it as a photo or PDF — tap 📎 to attach.",
+                "Send it as a photo or PDF -- tap the attachment icon to attach.",
                 parse_mode="Markdown",
             )
         return COLLECTING_DOCS
@@ -357,10 +450,12 @@ async def finalize(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     phone_number     = context.user_data.get("phone_number")
     email            = context.user_data.get("email")
     officer_code     = context.user_data.get("officer_code")
+    product_code     = context.user_data.get("product_code", "DEFAULT")
+    product_name     = context.user_data.get("product_name", "Standard Document Review")
     reference     = context.user_data.get("reference", generate_reference())
     applicant_id  = update.effective_user.id
 
-    await update.message.reply_text("All documents received — running checks...")
+    await update.message.reply_text("All documents received -- running checks...")
 
     result = validate_application(documents, user_info={
         "name": declared_name,
@@ -376,32 +471,54 @@ async def finalize(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if email:
         channels += ", or by email"
     applicant_msg = (
-        "✅ Your application has been submitted.\n"
+        "Your application has been submitted.\n"
+        f"Product: *{product_name}*\n"
         f"Your reference number is: *{reference}*\n\n"
         f"A credit officer will review your documents and send you an "
         f"update {channels} once their review is complete. "
         "This typically takes less than 24 hours.\n\n"
-        "Nothing in this is an approval or rejection — all decisions "
+        "Nothing in this is an approval or rejection -- all decisions "
         "are made by a human officer."
     )
 
     await update.message.reply_text(applicant_msg, parse_mode="Markdown")
 
     # ── Officer-facing detailed report ───────────────────────────────────
+    cfg = active_product_config()
     officer_lines = [
-        "📋 Document Readiness Summary",
+        "Document Readiness Summary",
         f"Reference: {reference}",
+        f"Product:   {product_name} ({product_code})",
+        f"Type:      {cfg.institution_type.upper()}",
         "",
         "Declared by applicant:",
-        f"  Name:    {declared_name or '—'}",
-        f"  Address: {declared_address or '—'}",
-        f"  Gender:  {declared_gender or '—'}",
+        f"  Name:    {declared_name or '--'}",
+        f"  Address: {declared_address or '--'}",
+        f"  Gender:  {declared_gender or '--'}",
         "",
         f"Completeness: {result.completeness_pct}%",
-        f"Ready for officer review: {'Yes' if result.ready_for_underwriting else 'No — see flags below'}",
+        f"Ready for officer review: {'Yes' if result.ready_for_underwriting else 'No -- see flags below'}",
         f"Processed in {elapsed:.1f} seconds",
         "",
     ]
+
+    if cfg.collateral_required:
+        officer_lines.append("Note: Collateral documentation required for this product.")
+    if cfg.guarantor_required:
+        officer_lines.append(f"Note: {cfg.guarantor_count} guarantor(s) required.")
+    if cfg.auto_approve_eligible:
+        officer_lines.append("Note: Product is eligible for auto-approval via scoring engine.")
+    if any(line.startswith("Note:") for line in officer_lines):
+        officer_lines.append("")
+
+    officer_lines.append(f"Approval workflow ({len(cfg.approval_stages)} stage(s)):")
+    for stage in cfg.approval_stages:
+        auto_tag = " [AUTO]" if stage["auto"] == "true" else ""
+        officer_lines.append(
+            f"  {stage['role'].replace('_', ' ').title()}: "
+            f"{stage['action'].replace('_', ' ')}{auto_tag}"
+        )
+    officer_lines.append("")
 
     if result.flags:
         officer_lines.append("Flags:")
@@ -421,13 +538,14 @@ async def finalize(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     if officer_chat_id:
         officer_header = (
-            f"📥 New application received\n"
+            f"New application received\n"
             f"Reference:          {reference}\n"
+            f"Product:            {product_name} ({product_code})\n"
             f"Applicant Tg ID:    {applicant_id}\n"
             f"Phone:              {'provided' if phone_number else 'not provided'}\n"
             f"Email:              {'provided' if email else 'not provided'}\n"
             f"Officer code:       {officer_code or 'direct'}\n"
-            f"\n⚠️ IDENTITY UNVERIFIED — applicant's documents have NOT been "
+            f"\nIDENTITY UNVERIFIED -- applicant's documents have NOT been "
             f"checked against NIBSS/NIMC. Confirm the applicant's identity "
             f"independently before proceeding.\n\n"
             f"To send the applicant a status update once you have vetted "
@@ -468,6 +586,8 @@ async def finalize(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                 declared_gender=declared_gender,
                 phone_number=phone_number,
                 email=email,
+                product_code=product_code,
+                product_name=product_name,
             )
             save_validation_result(
                 application_id=app_id,
@@ -665,12 +785,14 @@ def build_app() -> Application:
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            COLLECTING_NAME:    [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_name)],
-            COLLECTING_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_address)],
-            COLLECTING_GENDER:  [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_gender)],
-            COLLECTING_PHONE:   [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_phone)],
-            COLLECTING_EMAIL:   [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_email)],
-            COLLECTING_DOCS:    [MessageHandler(filters.PHOTO | filters.Document.PDF, receive_document)],
+            SELECTING_INSTITUTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_institution)],
+            SELECTING_PRODUCT:     [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_product)],
+            COLLECTING_NAME:       [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_name)],
+            COLLECTING_ADDRESS:    [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_address)],
+            COLLECTING_GENDER:     [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_gender)],
+            COLLECTING_PHONE:      [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_phone)],
+            COLLECTING_EMAIL:      [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_email)],
+            COLLECTING_DOCS:       [MessageHandler(filters.PHOTO | filters.Document.PDF, receive_document)],
             ConversationHandler.TIMEOUT: [
                 MessageHandler(filters.ALL, session_timeout),
                 CommandHandler("start", session_timeout),

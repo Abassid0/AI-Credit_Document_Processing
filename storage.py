@@ -35,13 +35,16 @@ def create_application(
     declared_gender: Optional[str] = None,
     phone_number: Optional[str] = None,
     email: Optional[str] = None,
+    product_code: Optional[str] = None,
+    product_name: Optional[str] = None,
 ) -> str:
     """
     Creates a new application record. Returns the Supabase record id.
     phone_number stored in E.164 format. email stored as-is (lowercased).
+    product_code/product_name identify the selected credit product.
     """
     client = get_client()
-    result = client.table("applications").insert({
+    row = {
         "telegram_user_id": telegram_user_id,
         "reference_number": reference_number,
         "officer_code": officer_code,
@@ -52,7 +55,12 @@ def create_application(
         "email":            encrypt_field(email),
         "status": "in_progress",
         "created_at": datetime.now(timezone.utc).isoformat(),
-    }).execute()
+    }
+    if product_code:
+        row["product_code"] = product_code
+    if product_name:
+        row["product_name"] = product_name
+    result = client.table("applications").insert(row).execute()
     return result.data[0]["id"]
 
 
@@ -142,7 +150,8 @@ def list_applications(limit: int = 500) -> list[dict]:
                 "reference_number,officer_code,declared_gender,"
                 "completeness_pct,ready_for_underwriting,flags,"
                 "turnaround_seconds,notification_channel,notification_status,"
-                "created_at,processed_at,status"
+                "created_at,processed_at,status,"
+                "product_code,product_name"
             )
             .order("created_at", desc=True)
             .limit(limit)
