@@ -47,6 +47,15 @@ DEMO_FLAG_TYPES = [
 ]
 CHANNELS = ["telegram", "sms", "whatsapp", "email", "none"]
 GENDERS  = ["Male", "Female", "Other", "Prefer not to say"]
+DEMO_PRODUCTS = [
+    ("MFB-SAL-001", "Salary Advance"),
+    ("MFB-GRP-001", "Group Loan"),
+    ("MFB-SME-001", "SME Business Loan"),
+    ("FIN-INS-001", "Instant Personal Loan"),
+    ("FIN-BNPL-001", "Buy Now Pay Later"),
+    ("BNK-SAL-001", "Personal Salary Loan"),
+    ("BNK-TRM-001", "SME Term Loan"),
+]
 
 
 def _synthetic_applications(n: int = 60) -> list[dict]:
@@ -63,6 +72,7 @@ def _synthetic_applications(n: int = 60) -> list[dict]:
             for _ in range(num_flags)
         ]
         channel = rng.choices(CHANNELS, weights=[65, 15, 8, 7, 5])[0]
+        product = rng.choice(DEMO_PRODUCTS)
         rows.append({
             "reference_number":      f"CRB-{created.strftime('%Y%m%d')}-{secrets.token_hex(2)}",
             "officer_code":          rng.choice(["OFC001", "OFC002", None, None]),
@@ -76,6 +86,8 @@ def _synthetic_applications(n: int = 60) -> list[dict]:
             "created_at":            created.isoformat(),
             "processed_at":          (created + timedelta(seconds=rng.uniform(12, 35))).isoformat(),
             "status":                "processed",
+            "product_code":          product[0],
+            "product_name":          product[1],
         })
     return rows
 
@@ -258,6 +270,85 @@ def chart_gender(processed: pd.DataFrame) -> str:
         textfont_size=12,
     ))
     fig.update_layout(**PLOTLY_THEME, height=280, title="Gender distribution",
+                      showlegend=False)
+    return fig_to_json(fig)
+
+
+def chart_products(processed: pd.DataFrame) -> str:
+    if "product_name" not in processed.columns or processed["product_name"].dropna().empty:
+        fig = go.Figure()
+        fig.add_annotation(text="No product data yet", x=0.5, y=0.5, showarrow=False,
+                           font_size=16, font_color="#A3AED0")
+        fig.update_layout(**PLOTLY_THEME, height=280, title="Applications by product")
+        return fig_to_json(fig)
+    prod_counts = processed["product_name"].value_counts().reset_index()
+    prod_counts.columns = ["product", "count"]
+    fig = px.bar(prod_counts, x="count", y="product", orientation="h",
+                 color_discrete_sequence=[ACCENT],
+                 labels={"count": "Applications", "product": ""},
+                 title="Applications by product")
+    fig.update_layout(**PLOTLY_THEME, height=max(280, len(prod_counts) * 35 + 80))
+    fig.update_xaxes(showgrid=True, gridcolor="rgba(163,174,208,0.15)")
+    fig.update_yaxes(showgrid=False, tickfont=dict(size=11))
+    fig.update_traces(marker_line_width=0, marker_cornerradius=6)
+    return fig_to_json(fig)
+
+
+def chart_product_readiness(processed: pd.DataFrame) -> str:
+    if "product_name" not in processed.columns or processed["product_name"].dropna().empty:
+        fig = go.Figure()
+        fig.add_annotation(text="No product data yet", x=0.5, y=0.5, showarrow=False,
+                           font_size=16, font_color="#A3AED0")
+        fig.update_layout(**PLOTLY_THEME, height=280, title="Readiness by product")
+        return fig_to_json(fig)
+    grp = processed.groupby("product_name").agg(
+        ready=("ready_for_underwriting", "sum"),
+        total=("ready_for_underwriting", "count"),
+    ).reset_index()
+    grp["not_ready"] = grp["total"] - grp["ready"]
+    grp = grp.sort_values("total", ascending=True)
+    fig = go.Figure()
+    fig.add_trace(go.Bar(y=grp["product_name"], x=grp["ready"], name="Ready",
+                         orientation="h", marker_color=GREEN,
+                         marker_cornerradius=4))
+    fig.add_trace(go.Bar(y=grp["product_name"], x=grp["not_ready"], name="Not ready",
+                         orientation="h", marker_color=RED,
+                         marker_cornerradius=4))
+    fig.update_layout(**PLOTLY_THEME, height=max(280, len(grp) * 35 + 80),
+                      title="Readiness by product", barmode="stack",
+                      legend=dict(orientation="h", yanchor="bottom", y=1.02,
+                                  xanchor="right", x=1, font_size=11))
+    fig.update_xaxes(showgrid=True, gridcolor="rgba(163,174,208,0.15)")
+    fig.update_yaxes(showgrid=False, tickfont=dict(size=11))
+    return fig_to_json(fig)
+
+
+def chart_institution_type(processed: pd.DataFrame) -> str:
+    if "product_code" not in processed.columns or processed["product_code"].dropna().empty:
+        fig = go.Figure()
+        fig.add_annotation(text="No institution data yet", x=0.5, y=0.5, showarrow=False,
+                           font_size=16, font_color="#A3AED0")
+        fig.update_layout(**PLOTLY_THEME, height=280, title="By institution type")
+        return fig_to_json(fig)
+    def _inst_type(code):
+        if not code or not isinstance(code, str):
+            return "Unknown"
+        prefix = code.split("-")[0].upper()
+        return {"MFB": "Microfinance", "FIN": "Fintech", "BNK": "Bank"}.get(prefix, "Other")
+    processed = processed.copy()
+    processed["inst_type"] = processed["product_code"].apply(_inst_type)
+    inst_counts = processed["inst_type"].value_counts().reset_index()
+    inst_counts.columns = ["type", "count"]
+    colors = {"Microfinance": ORANGE, "Fintech": ACCENT, "Bank": GREEN, "Other": "#A3AED0", "Unknown": "#A3AED0"}
+    fig = go.Figure(go.Pie(
+        labels=inst_counts["type"],
+        values=inst_counts["count"],
+        hole=0.65,
+        marker_colors=[colors.get(t, "#A3AED0") for t in inst_counts["type"]],
+        textinfo="percent+label",
+        textfont_size=12,
+    ))
+    fig.update_layout(**PLOTLY_THEME, height=280, title="By institution type",
                       showlegend=False)
     return fig_to_json(fig)
 
@@ -979,6 +1070,17 @@ HTML = r"""<!DOCTYPE html>
       <div class="card"><div id="chart-gender"></div></div>
       <div class="card"><div id="chart-turnaround"></div></div>
     </div>
+
+    <div class="section-header" style="margin-top:0.5rem">
+      <h2>Product Analytics</h2>
+      <span class="section-badge">By loan product</span>
+    </div>
+
+    <div class="chart-row r-1-1-1">
+      <div class="card"><div id="chart-products"></div></div>
+      <div class="card"><div id="chart-product-readiness"></div></div>
+      <div class="card"><div id="chart-institution"></div></div>
+    </div>
     </section>
 
     <!-- Applications table -->
@@ -995,7 +1097,7 @@ HTML = r"""<!DOCTYPE html>
       <table>
         <thead>
           <tr>
-            <th>Reference</th><th>Submitted</th><th>Complete</th>
+            <th>Reference</th><th>Product</th><th>Submitted</th><th>Complete</th>
             <th>Ready</th><th>Officer</th><th>Notified via</th><th>Turnaround</th>
           </tr>
         </thead>
@@ -1003,6 +1105,11 @@ HTML = r"""<!DOCTYPE html>
         {% for row in table_rows %}
         <tr>
           <td class="mono">{{ row.ref }}</td>
+          <td>
+            {% if row.product %}
+              <span class="pill pill-blue">{{ row.product }}</span>
+            {% else %}&mdash;{% endif %}
+          </td>
           <td>{{ row.submitted }}</td>
           <td>{{ row.completeness }}</td>
           <td>
@@ -1097,13 +1204,16 @@ function renderChart(id, spec) {
 }
 
 const charts = {
-  'chart-volume':       {{ volume_json       | safe }},
-  'chart-ready':        {{ ready_json        | safe }},
-  'chart-flags':        {{ flags_json        | safe }},
-  'chart-channels':     {{ channels_json     | safe }},
-  'chart-completeness': {{ completeness_json | safe }},
-  'chart-gender':       {{ gender_json       | safe }},
-  'chart-turnaround':   {{ turnaround_json   | safe }}
+  'chart-volume':            {{ volume_json            | safe }},
+  'chart-ready':             {{ ready_json             | safe }},
+  'chart-flags':             {{ flags_json             | safe }},
+  'chart-channels':          {{ channels_json          | safe }},
+  'chart-completeness':      {{ completeness_json      | safe }},
+  'chart-gender':            {{ gender_json            | safe }},
+  'chart-turnaround':        {{ turnaround_json        | safe }},
+  'chart-products':          {{ products_json          | safe }},
+  'chart-product-readiness': {{ product_readiness_json | safe }},
+  'chart-institution':       {{ institution_json       | safe }}
 };
 Object.entries(charts).forEach(([id, spec]) => renderChart(id, spec));
 
@@ -1300,6 +1410,19 @@ def index():
             "desc": "Claude extraction + validation pipeline speed",
         })
 
+    # Product insights
+    has_products = proc_count and "product_name" in processed.columns and processed["product_name"].notna().any()
+    if has_products:
+        product_counts = processed["product_name"].value_counts()
+        top_product = product_counts.index[0] if len(product_counts) else None
+        top_product_count = int(product_counts.iloc[0]) if len(product_counts) else 0
+        num_products = len(product_counts)
+        quick_insights.append({
+            "type": "info",
+            "title": f"{num_products} loan products active",
+            "desc": f"Most popular: {top_product} ({top_product_count} applications)" if top_product else "Product data available",
+        })
+
     # Charts
     volume_json       = chart_volume(apps_df) if not apps_df.empty else "{}"
     ready_json        = chart_ready(processed) if proc_count else "{}"
@@ -1308,6 +1431,9 @@ def index():
     completeness_json = chart_completeness(processed) if proc_count else "{}"
     gender_json       = chart_gender(processed) if proc_count else "{}"
     turnaround_json   = chart_turnaround(apps_df) if not apps_df.empty else "{}"
+    products_json          = chart_products(processed) if proc_count else "{}"
+    product_readiness_json = chart_product_readiness(processed) if proc_count else "{}"
+    institution_json       = chart_institution_type(processed) if proc_count else "{}"
 
     def _extract_chart(j):
         obj = json.loads(j)
@@ -1317,9 +1443,11 @@ def index():
     table_rows = []
     for _, r in apps_df.head(30).iterrows():
         ts = r["created_at"]
+        product_label = r.get("product_name", "") if pd.notna(r.get("product_name")) else ""
         table_rows.append({
             "ref":         r.get("reference_number", ""),
-            "submitted":   ts.strftime("%Y-%m-%d %H:%M") if pd.notna(ts) else "—",
+            "product":     product_label,
+            "submitted":   ts.strftime("%Y-%m-%d %H:%M") if pd.notna(ts) else "--",
             "completeness": f"{r['completeness_pct']:.1f}%",
             "ready":       "Yes" if pd.notna(r.get("ready_for_underwriting")) and r["ready_for_underwriting"] else "No",
             "officer":     r.get("officer_code", "") if pd.notna(r.get("officer_code")) else "",
@@ -1375,6 +1503,9 @@ def index():
         completeness_json=_extract_chart(completeness_json) if proc_count else "{}",
         gender_json=_extract_chart(gender_json) if proc_count else "{}",
         turnaround_json=_extract_chart(turnaround_json) if proc_count or not apps_df.empty else "{}",
+        products_json=_extract_chart(products_json) if proc_count else "{}",
+        product_readiness_json=_extract_chart(product_readiness_json) if proc_count else "{}",
+        institution_json=_extract_chart(institution_json) if proc_count else "{}",
     )
     return Response(html, mimetype="text/html")
 
